@@ -1,0 +1,10 @@
+version: '3'
+services:
+
+  beanstalkd:
+    image: schickling/beanstalkd
+    tty: true
+    expose:
+      - 11300
+    ports:
+      - 11300:11300
