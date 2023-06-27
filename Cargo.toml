@@ -11,4 +11,6 @@ tokio = { version = "1", features = ["full"] }
 thiserror = "1"
 serde_yaml = "0.9"
 log = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
