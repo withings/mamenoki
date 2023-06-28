@@ -253,13 +253,3 @@ impl BeanstalkProxy {
             .map_err(|e| BeanstalkError::UnexpectedResponse("stats-tube".to_string(), e.to_string()))
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn it_works() {
-//         // TODO: add some tests here
-//     }
-// }
