@@ -1,45 +1,36 @@
-use beanstalkclient::{Beanstalk, Statistics};
+use beanstalkclient::{Beanstalk, Statistics, BeanstalkProxy};
 use regex::Regex;
 use fastrand;
 
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn use_tube_test() {
-    let tube_name = generate_tube_name();
-    let mut beanstalk_client = init_beanstalk().await;
-    let beanstalk_proxy = beanstalk_client.proxy();
+    let (tube_name, beanstalk_client, beanstalk_proxy) = setup_client().await;
 
     let testing_code = async {
         let result = beanstalk_proxy.use_tube(&tube_name).await.unwrap();
         assert_eq!(format!("USING {}\r\n", tube_name), result);
     };
-    tokio::select! {
-        _ = beanstalk_client.run_channel() => assert!(false, "Client should not end before the testing code"),
-        _ = testing_code => {},
-    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn watch_tube_test() {
-    let tube_name = generate_tube_name();
-    let mut beanstalk_client = init_beanstalk().await;
-    let beanstalk_proxy = beanstalk_client.proxy();
+    let (tube_name, beanstalk_client, beanstalk_proxy) = setup_client().await;
 
     let testing_code = async {
         let result = beanstalk_proxy.watch_tube(&tube_name).await.unwrap();
         let regex = Regex::new(r"WATCHING \d+\r\n").unwrap();
         assert!(regex.is_match(&result));
     };
-    tokio::select! {
-        _ = beanstalk_client.run_channel() => assert!(false, "Client should not end before the testing code"),
-        _ = testing_code => {},
-    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn put_test() {
-    let tube_name = generate_tube_name();
-    let mut beanstalk_client = init_beanstalk().await;
-    let beanstalk_proxy = beanstalk_client.proxy();
+    let (tube_name, beanstalk_client, beanstalk_proxy) = setup_client().await;
 
     let testing_code = async {
         beanstalk_proxy.use_tube(&tube_name).await.unwrap();
@@ -49,17 +40,13 @@ async fn put_test() {
         let regex = Regex::new(r"INSERTED \d+\r\n").unwrap();
         assert!(regex.is_match(&result));
     };
-    tokio::select! {
-        _ = beanstalk_client.run_channel() => assert!(false, "Client should not end before the testing code"),
-        _ = testing_code => {},
-    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reserve_test() {
-    let tube_name = generate_tube_name();
-    let mut beanstalk_client = init_beanstalk().await;
-    let beanstalk_proxy = beanstalk_client.proxy();
+    let (tube_name, beanstalk_client, beanstalk_proxy) = setup_client().await;
 
     let testing_code = async {
         beanstalk_proxy.use_tube(&tube_name).await.unwrap();
@@ -69,17 +56,13 @@ async fn reserve_test() {
 
         assert_eq!("job-web-event-42", job.payload);
     };
-    tokio::select! {
-        _ = beanstalk_client.run_channel() => assert!(false, "Client should not end before the testing code"),
-        _ = testing_code => {},
-    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn delete_test() {
-    let tube_name = generate_tube_name();
-    let mut beanstalk_client = init_beanstalk().await;
-    let beanstalk_proxy = beanstalk_client.proxy();
+    let (tube_name, beanstalk_client, beanstalk_proxy) = setup_client().await;
 
     let testing_code = async {
         beanstalk_proxy.use_tube(&tube_name).await.unwrap();
@@ -93,19 +76,15 @@ async fn delete_test() {
         let delete_result = beanstalk_proxy.delete(job_id).await.unwrap();
         assert_eq!("DELETED\r\n", delete_result);
     };
-    tokio::select! {
-        _ = beanstalk_client.run_channel() => assert!(false, "Client should not end before the testing code"),
-        _ = testing_code => {},
-    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stats_test() {
-    let tube_name = generate_tube_name();
-    let mut beanstalk_client = init_beanstalk().await;
-    let beanstalk_proxy = beanstalk_client.proxy();
+    let (tube_name, beanstalk_client, beanstalk_proxy) = setup_client().await;
 
-    let testing_code = async {
+    let testing_code = async move {
         beanstalk_proxy.use_tube(&tube_name).await.unwrap();
         beanstalk_proxy.watch_tube(&tube_name).await.unwrap();
         beanstalk_proxy.put(String::from("first-job")).await.unwrap();
@@ -118,19 +97,24 @@ async fn stats_test() {
         assert!(result.total_jobs >= 1);
         assert!(result.current_connections >= 1);
     };
-    tokio::select! {
-        _ = beanstalk_client.run_channel() => assert!(false, "Client should not end before the testing code"),
-        _ = testing_code => {},
-    };
+
+    run_testing_code(beanstalk_client, testing_code).await;
 }
 
-async fn init_beanstalk() -> Beanstalk {
+async fn setup_client() -> (String, Beanstalk, BeanstalkProxy) {
+    let tube_name =format!("test-tube.{}", fastrand::u32(..));
+
     let beanstalkd_addr = String::from("localhost:11300");
     let beanstalk_client = Beanstalk::connect(&beanstalkd_addr).await.unwrap();
-    return beanstalk_client
+
+    let beanstalk_proxy = beanstalk_client.proxy();
+
+    (tube_name, beanstalk_client, beanstalk_proxy)
 }
 
-fn generate_tube_name() -> String {
-    let tube_name: String = format!("test-tube.{}", fastrand::u32(..));
-    return tube_name;
+async fn run_testing_code(mut beanstalk: Beanstalk, testing_code: impl core::future::Future<Output = ()>) {
+    tokio::select! {
+        _ = beanstalk.run_channel() => assert!(false, "Client should not end before the testing code"),
+        _ = testing_code => {},
+    };
 }
