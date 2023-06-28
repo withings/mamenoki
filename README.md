@@ -17,3 +17,11 @@ You can run that code with
 
     $ docker compose up
     $ cargo run --example connection_and_request
+
+
+## Tests
+
+You can run the tests during the development with
+
+    $ docker compose up
+    $ cargo test
