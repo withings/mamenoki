@@ -259,17 +259,8 @@ impl BeanstalkProxy {
     /// Get server stats
     pub async fn stats(&self) -> Result<Statistics, BeanstalkError> {
         let command_response = self.exchange(ClientMessageBody { command: String::from("stats\r\n"), more_condition: Some("OK".to_string()) }).await?;
-        let mut lines = command_response.trim().split("\r\n");
-
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse("stats".to_string(), "empty response".to_string()))?;
-        let parts: Vec<&str> = first_line.trim().split(" ").collect();
-
-        if parts.len() != 2 || parts[0] != "OK" {
-            return Err(BeanstalkError::UnexpectedResponse("stats".to_string(), command_response));
-        }
-
-        let stats_yaml = lines.collect::<Vec<&str>>().join("\r\n");
+        
+        let stats_yaml = Self::extract_stats_response(command_response)?;
         serde_yaml::from_str(&stats_yaml)
             .map_err(|e| BeanstalkError::UnexpectedResponse("stats".to_string(), e.to_string()))
     }
@@ -277,6 +268,13 @@ impl BeanstalkProxy {
     /// Get stats for a job
     pub async fn stats_job(&self, id: u64) -> Result<JobStatistics, BeanstalkError> {
         let command_response = self.exchange(ClientMessageBody { command: format!("stats-job {}\r\n", id), more_condition: Some("OK".to_string()) }).await?;
+
+        let stats_yaml = Self::extract_stats_response(command_response)?;
+        serde_yaml::from_str(&stats_yaml)
+            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
+    }
+
+    fn extract_stats_response(command_response: String) -> Result<String, BeanstalkError> {
         let mut lines = command_response.trim().split("\r\n");
 
         let first_line = lines.next()
@@ -287,8 +285,6 @@ impl BeanstalkProxy {
             return Err(BeanstalkError::UnexpectedResponse("stats-job".to_string(), command_response));
         }
 
-        let stats_yaml = lines.collect::<Vec<&str>>().join("\r\n");
-        serde_yaml::from_str(&stats_yaml)
-            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
-    }
+        Ok(lines.collect::<Vec<&str>>().join("\r\n"))
+    } 
 }
