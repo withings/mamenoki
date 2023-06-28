@@ -12,6 +12,7 @@ use log;
 
 /// Queue size limit for messages to a Beanstalk channel
 const BEANSTALK_MESSAGE_QUEUE_SIZE: usize = 128;
+pub const DEFAULT_TIME_TO_RUN: u32 = 60;
 
 /// A beanstalkd handle
 pub struct Beanstalk {
@@ -159,6 +160,26 @@ pub struct Statistics {
     pub uptime: u64,
 }
 
+/// job statistics
+#[derive(Serialize, Deserialize)]
+pub struct JobStatistics {
+    pub id: u64,
+    pub tube: String,
+    pub state: String, // "ready" or "delayed" or "reserved" or "buried"
+    pub pri: u32,
+    pub age: u32,
+    pub delay: u32,
+    pub ttr: u32,
+    #[serde(rename = "time-left")]
+    pub time_left: u32,
+    pub file: u32,
+    pub reserves: u32,
+    pub timeouts: u32,
+    pub releases: u32,
+    pub buries: u32,
+    pub kicks: u32
+   
+}
 
 impl BeanstalkProxy {
     /// Low level channel exchange: send a message body over the channel and wait for a reply
@@ -192,7 +213,7 @@ impl BeanstalkProxy {
     /// Put a job into the queue
     pub async fn put(&self, job: String) -> BeanstalkResult {
         log::debug!("putting beanstalkd job, {} byte(s)", job.len());
-        let inserted = self.exchange(ClientMessageBody { command: format!("put 0 0 60 {}\r\n{}\r\n", job.len(), job), more_condition: None }).await?;
+        let inserted = self.exchange(ClientMessageBody { command: format!("put 0 0 {} {}\r\n{}\r\n", DEFAULT_TIME_TO_RUN, job.len(), job), more_condition: None }).await?;
         match inserted.starts_with("INSERTED ") {
             true => Ok(inserted),
             false => Err(BeanstalkError::UnexpectedResponse("put".to_string(), inserted))
@@ -241,15 +262,33 @@ impl BeanstalkProxy {
         let mut lines = command_response.trim().split("\r\n");
 
         let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse("stats-tube".to_string(), "empty response".to_string()))?;
+            .ok_or(BeanstalkError::UnexpectedResponse("stats".to_string(), "empty response".to_string()))?;
         let parts: Vec<&str> = first_line.trim().split(" ").collect();
 
         if parts.len() != 2 || parts[0] != "OK" {
-            return Err(BeanstalkError::UnexpectedResponse("stats-tube".to_string(), command_response));
+            return Err(BeanstalkError::UnexpectedResponse("stats".to_string(), command_response));
         }
 
         let stats_yaml = lines.collect::<Vec<&str>>().join("\r\n");
         serde_yaml::from_str(&stats_yaml)
-            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-tube".to_string(), e.to_string()))
+            .map_err(|e| BeanstalkError::UnexpectedResponse("stats".to_string(), e.to_string()))
+    }
+
+    /// Get stats for a job
+    pub async fn stats_job(&self, id: u64) -> Result<JobStatistics, BeanstalkError> {
+        let command_response = self.exchange(ClientMessageBody { command: format!("stats-job {}\r\n", id), more_condition: Some("OK".to_string()) }).await?;
+        let mut lines = command_response.trim().split("\r\n");
+
+        let first_line = lines.next()
+            .ok_or(BeanstalkError::UnexpectedResponse("stats-job".to_string(), "empty response".to_string()))?;
+        let parts: Vec<&str> = first_line.trim().split(" ").collect();
+
+        if parts.len() != 2 || parts[0] != "OK" {
+            return Err(BeanstalkError::UnexpectedResponse("stats-job".to_string(), command_response));
+        }
+
+        let stats_yaml = lines.collect::<Vec<&str>>().join("\r\n");
+        serde_yaml::from_str(&stats_yaml)
+            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
     }
 }

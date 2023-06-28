@@ -101,6 +101,38 @@ async fn stats_test() {
     run_testing_code(beanstalk_client, testing_code).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stats_job_test() {
+    let (tube_name, beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        beanstalk_proxy.use_tube(&tube_name).await.unwrap();
+        beanstalk_proxy.watch_tube(&tube_name).await.unwrap();
+
+        let put_result = beanstalk_proxy.put(String::from("a-job")).await.unwrap();
+        let extract_id_regex = Regex::new(r"INSERTED (\d+)\r\n").unwrap();
+        let caps = extract_id_regex.captures(&put_result).unwrap();
+        let job_id = caps.get(1).unwrap().as_str().parse::<u64>().unwrap();
+
+        let job_stats = beanstalk_proxy.stats_job(job_id).await.unwrap();
+        assert_eq!(job_id, job_stats.id);
+        assert_eq!(tube_name, job_stats.tube);
+        assert_eq!("ready", job_stats.state);
+        assert_eq!(0, job_stats.pri);
+        assert_eq!(0, job_stats.delay);
+        assert_eq!(beanstalkclient::DEFAULT_TIME_TO_RUN, job_stats.ttr);
+        assert_eq!(0, job_stats.time_left);
+        assert_eq!(0, job_stats.file);
+        assert_eq!(0, job_stats.reserves);
+        assert_eq!(0, job_stats.timeouts);
+        assert_eq!(0, job_stats.releases);
+        assert_eq!(0, job_stats.buries);
+        assert_eq!(0, job_stats.kicks);
+    };
+
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
 async fn setup_client() -> (String, Beanstalk, BeanstalkProxy) {
     let tube_name =format!("test-tube.{}", fastrand::u32(..));
 
