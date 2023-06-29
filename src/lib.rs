@@ -279,6 +279,25 @@ impl BeanstalkProxy {
         })
     }
 
+    /// Peek a job by id
+    pub async fn peek(&self, job_id: u64) -> Result<Job, BeanstalkError> {
+        let command_response = self.exchange(ClientMessageBody { command: format!("peek {}\r\n", job_id), more_condition: Some("FOUND".to_string()) }).await?;
+        let mut lines = command_response.trim().split("\r\n");
+
+        let first_line = lines.next()
+            .ok_or(BeanstalkError::UnexpectedResponse("peek".to_string(), "<empty response>".to_string()))?;
+        let parts: Vec<&str> = first_line.trim().split(" ").collect();
+
+        if parts.len() != 3 || parts[0] != "FOUND" {
+            return Err(BeanstalkError::UnexpectedResponse("peek".to_string(), command_response));
+        }
+
+        Ok(Job {
+            id: job_id,
+            payload: lines.collect::<Vec<&str>>().join("\r\n"),
+        })
+    }
+
     /// Delete a job from the queue
     pub async fn delete(&self, id: u64) -> BeanstalkResult {
         log::debug!("deleting job ID {}", id);

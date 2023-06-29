@@ -71,9 +71,7 @@ async fn delete_test() {
         in_new_testing_tube(&beanstalk_proxy).await;
         
         let put_result = beanstalk_proxy.put(String::from("a-job")).await.unwrap();
-        let extract_id_regex = Regex::new(r"INSERTED (\d+)\r\n").unwrap();
-        let caps = extract_id_regex.captures(&put_result).unwrap();
-        let job_id = caps.get(1).unwrap().as_str().parse::<u64>().unwrap();
+        let job_id = job_id_from_put_result(&put_result);
 
         let delete_result = beanstalk_proxy.delete(job_id).await.unwrap();
         assert_eq!("DELETED\r\n", delete_result);
@@ -111,9 +109,7 @@ async fn stats_job_test() {
         let tube_name = in_new_testing_tube(&beanstalk_proxy).await;
 
         let put_result = beanstalk_proxy.put(String::from("a-job")).await.unwrap();
-        let extract_id_regex = Regex::new(r"INSERTED (\d+)\r\n").unwrap();
-        let caps = extract_id_regex.captures(&put_result).unwrap();
-        let job_id = caps.get(1).unwrap().as_str().parse::<u64>().unwrap();
+        let job_id = job_id_from_put_result(&put_result);
 
         let job_stats = beanstalk_proxy.stats_job(job_id).await.unwrap();
         assert_eq!(job_id, job_stats.id);
@@ -265,6 +261,46 @@ async fn touch_failure_case_test() {
     run_testing_code(beanstalk_client, testing_code).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn peek_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        let job_result = beanstalk_proxy.put(String::from("job-data")).await.unwrap();
+        let job_id = job_id_from_put_result(&job_result);
+
+        let job = beanstalk_proxy.peek(job_id).await.unwrap();
+        assert_eq!(job_id, job.id);
+        assert_eq!("job-data", job.payload);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn peek_failure_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        match beanstalk_proxy.peek(456456456456).await {
+            Ok(_) => panic!("peek wasn't expected to return an Ok value"),
+            Err(e) => match e {
+                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                    assert_eq!("peek", command);
+                    assert_eq!("NOT_FOUND\r\n", response);
+                },
+                _ => panic!("peek was expected to return an error of type BeanstalkError::UnexpectedResponse")
+            }
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
 async fn setup_client() -> (Beanstalk, BeanstalkProxy) {
     let beanstalkd_addr = String::from("localhost:11300");
     let beanstalk_client = Beanstalk::connect(&beanstalkd_addr).await.unwrap();
@@ -292,4 +328,10 @@ async fn run_testing_code(mut beanstalk: Beanstalk, testing_code: impl core::fut
         _ = beanstalk.run_channel() => assert!(false, "Client should not end before the testing code"),
         _ = testing_code => {},
     };
+}
+
+fn job_id_from_put_result(put_result:  &String) -> u64 {
+    let extract_id_regex = Regex::new(r"INSERTED (\d+)\r\n").unwrap();
+    let caps = extract_id_regex.captures(put_result).unwrap();
+    caps.get(1).unwrap().as_str().parse::<u64>().unwrap()
 }
