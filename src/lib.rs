@@ -12,6 +12,8 @@ use log;
 
 /// Queue size limit for messages to a Beanstalk channel
 const BEANSTALK_MESSAGE_QUEUE_SIZE: usize = 128;
+const DEFAULT_PRIORITY: u32 = 0;
+const PUT_DEFAULT_DELAY: u32 = 0;
 pub const DEFAULT_TIME_TO_RUN: u32 = 60;
 
 /// A beanstalkd handle
@@ -243,7 +245,8 @@ impl BeanstalkProxy {
     /// Put a job into the queue
     pub async fn put(&self, job: String) -> BeanstalkResult {
         log::debug!("putting beanstalkd job, {} byte(s)", job.len());
-        let inserted = self.exchange(ClientMessageBody { command: format!("put 0 0 {} {}\r\n{}\r\n", DEFAULT_TIME_TO_RUN, job.len(), job), more_condition: None }).await?;
+        let command = format!("put {} {} {} {}\r\n{}\r\n", DEFAULT_PRIORITY, PUT_DEFAULT_DELAY, DEFAULT_TIME_TO_RUN, job.len(), job);
+        let inserted = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
         match inserted.starts_with("INSERTED ") {
             true => Ok(inserted),
             false => Err(BeanstalkError::UnexpectedResponse("put".to_string(), inserted))
@@ -314,6 +317,16 @@ impl BeanstalkProxy {
         let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
         serde_yaml::from_str(&stats_yaml)
             .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
+    }
+
+    /// Bury a job from the queue
+    pub async fn bury(&self, id: u64) -> BeanstalkResult {
+        log::debug!("burying job ID {}", id);
+        let buried = self.exchange(ClientMessageBody { command: format!("bury {} {}\r\n", id, DEFAULT_PRIORITY), more_condition: None }).await?;
+        match buried.starts_with("BURIED") {
+            true => Ok(buried),
+            false => Err(BeanstalkError::UnexpectedResponse("bury".to_string(), buried))
+        }
     }
 
     fn extract_stats_response(command_name: String, command_response: String) -> Result<String, BeanstalkError> {

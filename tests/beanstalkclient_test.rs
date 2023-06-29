@@ -170,14 +170,59 @@ async fn stats_tube_failure_case_test() {
 
     let testing_code = async {
         match beanstalk_proxy.stats_tube(&random_testing_tube_name()).await {
-            Ok(_) => (),
+            Ok(_) => panic!("stats_tube wasn't expected to return an Ok result"),
             Err(e) => match e {
-                beanstalkclient::BeanstalkError::UnexpectedResponse(s1, s2) => (),
-                _ => ()
+                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                    assert_eq!("stats-tube", command);
+                    assert_eq!("NOT_FOUND\r\n", response);
+                },
+                _ => panic!("stats_tube was expected to return an error of type BeanstalkError::UnexpectedResponse")
             }
         }
     };
 
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn bury_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        beanstalk_proxy.put(String::from("job-blah-blah")).await.unwrap();
+        let job = beanstalk_proxy.reserve().await.unwrap();
+
+        let bury_result = beanstalk_proxy.bury(job.id).await.unwrap();
+        assert_eq!("BURIED\r\n", bury_result);
+
+        let job_stats = beanstalk_proxy.stats_job(job.id).await.unwrap();
+        assert_eq!("buried", job_stats.state);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn bury_failure_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        match beanstalk_proxy.bury(789789789).await {
+            Ok(_) => panic!("bury wasn't expected to return an Ok value"),
+            Err(e) => match e {
+                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                    assert_eq!("bury", command);
+                    assert_eq!("NOT_FOUND\r\n", response);
+                },
+                _ => panic!("bury was expected to return an error of type BeanstalkError::UnexpectedResponse")
+            }
+        }
+    };
+    
     run_testing_code(beanstalk_client, testing_code).await;
 }
 
