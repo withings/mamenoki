@@ -301,6 +301,38 @@ async fn peek_failure_case_test() {
     run_testing_code(beanstalk_client, testing_code).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn peek_ready_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        beanstalk_proxy.put(String::from("the-ready-job")).await.unwrap();
+
+        let job = beanstalk_proxy.peek_ready().await.unwrap().unwrap();
+        assert_eq!("the-ready-job", job.payload);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn peek_ready_not_found_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        match beanstalk_proxy.peek_ready().await.unwrap() {
+            Some(_) => panic!("peek_ready was not expected to find any ready job"),
+            None => {}
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
 async fn setup_client() -> (Beanstalk, BeanstalkProxy) {
     let beanstalkd_addr = String::from("localhost:11300");
     let beanstalk_client = Beanstalk::connect(&beanstalkd_addr).await.unwrap();
