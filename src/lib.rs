@@ -178,7 +178,37 @@ pub struct JobStatistics {
     pub releases: u32,
     pub buries: u32,
     pub kicks: u32
-   
+}
+
+/// Tube statistics
+#[derive(Serialize, Deserialize)]
+pub struct TubeStatistics {
+    pub name: String,
+    #[serde(rename = "current-jobs-urgent")]
+    pub jobs_urgent: u64,
+    #[serde(rename = "current-jobs-ready")]
+    pub jobs_ready: u64,
+    #[serde(rename = "current-jobs-reserved")]
+    pub jobs_reserved: u64,
+    #[serde(rename = "current-jobs-delayed")]
+    pub jobs_delayed: u64,
+    #[serde(rename = "current-jobs-buried")]
+    pub jobs_buried: u64,
+    #[serde(rename = "total-jobs")]
+    pub total_jobs: u64,
+    #[serde(rename = "current-using")]
+    pub using: usize,
+    #[serde(rename = "current-waiting")]
+    pub waiting: usize,
+    #[serde(rename = "current-watching")]
+    pub watching: usize,
+    pub pause: i64,
+    #[serde(rename = "cmd-delete")]
+    pub cmd_delete: u64,
+    #[serde(rename = "cmd-pause-tube")]
+    pub cmd_pause_tube: u64,
+    #[serde(rename = "pause-time-left")]
+    pub pause_time_left: u32
 }
 
 impl BeanstalkProxy {
@@ -258,31 +288,43 @@ impl BeanstalkProxy {
 
     /// Get server stats
     pub async fn stats(&self) -> Result<Statistics, BeanstalkError> {
-        let command_response = self.exchange(ClientMessageBody { command: String::from("stats\r\n"), more_condition: Some("OK".to_string()) }).await?;
+        let command_name = String::from("stats");
+        let command_response = self.exchange(ClientMessageBody { command: format!("{}\r\n", command_name), more_condition: Some("OK".to_string()) }).await?;
         
-        let stats_yaml = Self::extract_stats_response(command_response)?;
+        let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
         serde_yaml::from_str(&stats_yaml)
             .map_err(|e| BeanstalkError::UnexpectedResponse("stats".to_string(), e.to_string()))
     }
 
-    /// Get stats for a job
+    /// Get the stats for a job
     pub async fn stats_job(&self, id: u64) -> Result<JobStatistics, BeanstalkError> {
-        let command_response = self.exchange(ClientMessageBody { command: format!("stats-job {}\r\n", id), more_condition: Some("OK".to_string()) }).await?;
+        let command_name = String::from("stats-job");
+        let command_response = self.exchange(ClientMessageBody { command: format!("{} {}\r\n", command_name, id), more_condition: Some("OK".to_string()) }).await?;
 
-        let stats_yaml = Self::extract_stats_response(command_response)?;
+        let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
         serde_yaml::from_str(&stats_yaml)
             .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
     }
 
-    fn extract_stats_response(command_response: String) -> Result<String, BeanstalkError> {
+    /// Get the stats for a tube
+    pub async fn stats_tube(&self, tube_name: &String) -> Result<TubeStatistics, BeanstalkError> {
+        let command_name = String::from("stats-tube");
+        let command_response = self.exchange(ClientMessageBody { command: format!("{} {}\r\n", command_name, tube_name), more_condition: Some("OK".to_string()) }).await?;
+
+        let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
+        serde_yaml::from_str(&stats_yaml)
+            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
+    }
+
+    fn extract_stats_response(command_name: String, command_response: String) -> Result<String, BeanstalkError> {
         let mut lines = command_response.trim().split("\r\n");
 
         let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse("stats-job".to_string(), "empty response".to_string()))?;
+            .ok_or(BeanstalkError::UnexpectedResponse(command_name.clone(), "empty response".to_string()))?;
         let parts: Vec<&str> = first_line.trim().split(" ").collect();
 
         if parts.len() != 2 || parts[0] != "OK" {
-            return Err(BeanstalkError::UnexpectedResponse("stats-job".to_string(), command_response));
+            return Err(BeanstalkError::UnexpectedResponse(command_name, command_response));
         }
 
         Ok(lines.collect::<Vec<&str>>().join("\r\n"))

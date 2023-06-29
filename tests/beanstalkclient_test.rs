@@ -134,6 +134,53 @@ async fn stats_job_test() {
     run_testing_code(beanstalk_client, testing_code).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stats_tube_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        let tube_name = in_new_testing_tube(&beanstalk_proxy).await;
+
+        beanstalk_proxy.put(String::from("a-job")).await.unwrap();
+
+        let tube_stats = beanstalk_proxy.stats_tube(&tube_name).await.unwrap();
+        assert_eq!(tube_name, tube_stats.name);
+        assert_eq!(1, tube_stats.jobs_urgent);
+        assert_eq!(1, tube_stats.jobs_ready);
+        assert_eq!(0, tube_stats.jobs_reserved);
+        assert_eq!(0, tube_stats.jobs_delayed);
+        assert_eq!(0, tube_stats.jobs_buried);
+
+        assert_eq!(1, tube_stats.total_jobs);
+        assert_eq!(1, tube_stats.using);
+        assert_eq!(0, tube_stats.waiting);
+        assert_eq!(1, tube_stats.watching);
+        assert_eq!(0, tube_stats.pause);
+        assert_eq!(0, tube_stats.cmd_delete);
+        assert_eq!(0, tube_stats.cmd_pause_tube);
+        assert_eq!(0, tube_stats.pause_time_left);
+    };
+
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stats_tube_failure_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        match beanstalk_proxy.stats_tube(&random_testing_tube_name()).await {
+            Ok(_) => (),
+            Err(e) => match e {
+                beanstalkclient::BeanstalkError::UnexpectedResponse(s1, s2) => (),
+                _ => ()
+            }
+        }
+    };
+
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
 async fn setup_client() -> (Beanstalk, BeanstalkProxy) {
     let beanstalkd_addr = String::from("localhost:11300");
     let beanstalk_client = Beanstalk::connect(&beanstalkd_addr).await.unwrap();
