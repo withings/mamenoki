@@ -329,30 +329,12 @@ impl BeanstalkProxy {
 
     /// Peek the next ready job, if any
     pub async fn peek_ready(&self) -> Result<Option<Job>, BeanstalkError> {
-        let command_response = self.exchange(ClientMessageBody { command: String::from("peek-ready\r\n"), more_condition: Some("FOUND".to_string()) }).await?;
-        let mut lines = command_response.trim().split("\r\n");
+        self.peek_from_queue(String::from("ready")).await
+    }
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse("peek".to_string(), "<empty response>".to_string()))?;
-        let parts: Vec<&str> = first_line.trim().split(" ").collect();
-
-        match parts[0]  {
-            "FOUND" => {
-                if parts.len() != 3 {
-                    return Err(BeanstalkError::UnexpectedResponse("peek".to_string(), command_response));
-                }
-        
-                let id = parts[1].parse::<u64>()
-                    .map_err(|_| BeanstalkError::UnexpectedResponse("reserve".to_string(), command_response.clone()))?;
-        
-                Ok(Some(Job {
-                    id: id,
-                    payload: lines.collect::<Vec<&str>>().join("\r\n"),
-                }))
-            },
-            "NOT_FOUND" => Ok(None),
-            _ => Err(BeanstalkError::UnexpectedResponse("peek".to_string(), command_response))
-        }
+    /// Peek the delayed job with the shortest delay left
+    pub async fn peek_delayed(&self) -> Result<Option<Job>, BeanstalkError> {
+        self.peek_from_queue(String::from("delayed")).await
     }
 
     /// Delete a job from the queue
@@ -412,6 +394,36 @@ impl BeanstalkProxy {
         match touched.starts_with("TOUCHED") {
             true => Ok(touched),
             false => Err(BeanstalkError::UnexpectedResponse("touch".to_string(), touched))
+        }
+    }
+
+    // private functions //////////////////////////////////////////////////////
+
+    async fn peek_from_queue(&self, status: String) -> Result<Option<Job>, BeanstalkError> {
+        let command_name = format!("peek-{}", status);
+        let command_response = self.exchange(ClientMessageBody { command: format!("{}\r\n", command_name), more_condition: Some("FOUND".to_string()) }).await?;
+        let mut lines = command_response.trim().split("\r\n");
+
+        let first_line = lines.next()
+            .ok_or(BeanstalkError::UnexpectedResponse(command_name.clone(), "<empty response>".to_string()))?;
+        let parts: Vec<&str> = first_line.trim().split(" ").collect();
+
+        match parts[0]  {
+            "FOUND" => {
+                if parts.len() != 3 {
+                    return Err(BeanstalkError::UnexpectedResponse(command_name.clone(), command_response));
+                }
+        
+                let id = parts[1].parse::<u64>()
+                    .map_err(|_| BeanstalkError::UnexpectedResponse(command_name, command_response.clone()))?;
+        
+                Ok(Some(Job {
+                    id: id,
+                    payload: lines.collect::<Vec<&str>>().join("\r\n"),
+                }))
+            },
+            "NOT_FOUND" => Ok(None),
+            _ => Err(BeanstalkError::UnexpectedResponse("peek".to_string(), command_response))
         }
     }
 
