@@ -226,6 +226,45 @@ async fn bury_failure_case_test() {
     run_testing_code(beanstalk_client, testing_code).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn touch_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        beanstalk_proxy.put(String::from("job-blah-blah")).await.unwrap();
+        let job = beanstalk_proxy.reserve().await.unwrap();
+
+        let bury_result = beanstalk_proxy.touch(job.id).await.unwrap();
+        assert_eq!("TOUCHED\r\n", bury_result);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn touch_failure_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        match beanstalk_proxy.touch(123123123123).await {
+            Ok(_) => panic!("touch wasn't expected to return an Ok value"),
+            Err(e) => match e {
+                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                    assert_eq!("touch", command);
+                    assert_eq!("NOT_FOUND\r\n", response);
+                },
+                _ => panic!("touch was expected to return an error of type BeanstalkError::UnexpectedResponse")
+            }
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
 async fn setup_client() -> (Beanstalk, BeanstalkProxy) {
     let beanstalkd_addr = String::from("localhost:11300");
     let beanstalk_client = Beanstalk::connect(&beanstalkd_addr).await.unwrap();

@@ -329,6 +329,16 @@ impl BeanstalkProxy {
         }
     }
 
+    /// Touch a reserved job
+    pub async fn touch(&self, id: u64) -> BeanstalkResult {
+        log::debug!("touching job ID {}", id);
+        let touched = self.exchange(ClientMessageBody { command: format!("touch {}\r\n", id), more_condition: None }).await?;
+        match touched.starts_with("TOUCHED") {
+            true => Ok(touched),
+            false => Err(BeanstalkError::UnexpectedResponse("touch".to_string(), touched))
+        }
+    }
+
     fn extract_stats_response(command_name: String, command_response: String) -> Result<String, BeanstalkError> {
         let mut lines = command_response.trim().split("\r\n");
 
