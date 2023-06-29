@@ -12,8 +12,8 @@ use log;
 
 /// Queue size limit for messages to a Beanstalk channel
 const BEANSTALK_MESSAGE_QUEUE_SIZE: usize = 128;
-const DEFAULT_PRIORITY: u32 = 0;
-const PUT_DEFAULT_DELAY: u32 = 0;
+pub const DEFAULT_PRIORITY: u32 = 0;
+pub const PUT_DEFAULT_DELAY: u32 = 0;
 pub const DEFAULT_TIME_TO_RUN: u32 = 60;
 
 /// A beanstalkd handle
@@ -146,6 +146,22 @@ pub struct Job {
     pub payload: String
 }
 
+pub struct PutCommandConfig {
+    pub priority: u32,
+    pub delay: u32,
+    pub time_to_run: u32
+}
+
+impl PutCommandConfig {
+    pub fn new(priority: Option<u32>, delay: Option<u32>, time_to_run: Option<u32>) -> Self {
+        Self {
+            priority: priority.unwrap_or(DEFAULT_PRIORITY),
+            delay: delay.unwrap_or(PUT_DEFAULT_DELAY),
+            time_to_run: time_to_run.unwrap_or(DEFAULT_TIME_TO_RUN)
+        }
+    }
+}
+
 /// beanstalkd statistics
 #[derive(Serialize, Deserialize)]
 pub struct Statistics {
@@ -168,10 +184,12 @@ pub struct JobStatistics {
     pub id: u64,
     pub tube: String,
     pub state: String, // "ready" or "delayed" or "reserved" or "buried"
-    pub pri: u32,
+    #[serde(rename = "pri")]
+    pub priority: u32,
     pub age: u32,
     pub delay: u32,
-    pub ttr: u32,
+    #[serde(rename = "ttr")]
+    pub time_to_run: u32,
     #[serde(rename = "time-left")]
     pub time_left: u32,
     pub file: u32,
@@ -246,6 +264,17 @@ impl BeanstalkProxy {
     pub async fn put(&self, job: String) -> BeanstalkResult {
         log::debug!("putting beanstalkd job, {} byte(s)", job.len());
         let command = format!("put {} {} {} {}\r\n{}\r\n", DEFAULT_PRIORITY, PUT_DEFAULT_DELAY, DEFAULT_TIME_TO_RUN, job.len(), job);
+        let inserted = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        match inserted.starts_with("INSERTED ") {
+            true => Ok(inserted),
+            false => Err(BeanstalkError::UnexpectedResponse("put".to_string(), inserted))
+        }
+    }
+
+    /// Put a job into the queue, with a custom configuration
+    pub async fn put_with_config(&self, job: String, config: PutCommandConfig) -> BeanstalkResult {
+        log::debug!("putting beanstalkd job, {} byte(s)", job.len());
+        let command = format!("put {} {} {} {}\r\n{}\r\n", config.priority, config.delay, config.time_to_run, job.len(), job);
         let inserted = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
         match inserted.starts_with("INSERTED ") {
             true => Ok(inserted),

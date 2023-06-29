@@ -1,4 +1,4 @@
-use beanstalkclient::{Beanstalk, Statistics, BeanstalkProxy};
+use beanstalkclient::*;
 use regex::Regex;
 use fastrand;
 
@@ -42,6 +42,29 @@ async fn put_test() {
         // expect that containg INSERTED followed by the id of the created job
         let regex = Regex::new(r"INSERTED \d+\r\n").unwrap();
         assert!(regex.is_match(&result));
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn put_with_config_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        let priority = 50;
+        let delay = 3600;
+        let time_to_run = 300;
+        let config = PutCommandConfig::new(Some(priority), Some(delay), Some(time_to_run));
+        let result = beanstalk_proxy.put_with_config(String::from("job-web-event"), config).await.unwrap();
+    
+        let job_id = job_id_from_put_result(&result);
+        let job_stats = beanstalk_proxy.stats_job(job_id).await.unwrap();
+        assert_eq!(priority, job_stats.priority);
+        assert_eq!(delay, job_stats.delay);
+        assert_eq!(time_to_run, job_stats.time_to_run);
     };
     
     run_testing_code(beanstalk_client, testing_code).await;
@@ -115,9 +138,9 @@ async fn stats_job_test() {
         assert_eq!(job_id, job_stats.id);
         assert_eq!(tube_name, job_stats.tube);
         assert_eq!("ready", job_stats.state);
-        assert_eq!(0, job_stats.pri);
-        assert_eq!(0, job_stats.delay);
-        assert_eq!(beanstalkclient::DEFAULT_TIME_TO_RUN, job_stats.ttr);
+        assert_eq!(beanstalkclient::DEFAULT_PRIORITY, job_stats.priority);
+        assert_eq!(beanstalkclient::PUT_DEFAULT_DELAY, job_stats.delay);
+        assert_eq!(beanstalkclient::DEFAULT_TIME_TO_RUN, job_stats.time_to_run);
         assert_eq!(0, job_stats.time_left);
         assert_eq!(0, job_stats.file);
         assert_eq!(0, job_stats.reserves);
@@ -332,6 +355,17 @@ async fn peek_ready_not_found_case_test() {
     
     run_testing_code(beanstalk_client, testing_code).await;
 }
+
+#[test]
+fn put_command_config_defaults_test() {
+    let config = PutCommandConfig::new(None, None, None);
+    assert_eq!(0, config.priority);
+    assert_eq!(0, config.delay);
+    assert_eq!(60, config.time_to_run);
+}
+
+
+// Helper functions ///////////////////////////////////////////////////////////
 
 async fn setup_client() -> (Beanstalk, BeanstalkProxy) {
     let beanstalkd_addr = String::from("localhost:11300");
