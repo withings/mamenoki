@@ -31,6 +31,43 @@ async fn watch_tube_test() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ignore_tube_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        let tube_name = random_testing_tube_name();
+        
+        let result = beanstalk_proxy.watch_tube(&tube_name).await.unwrap();
+        // The watched tubes are "default" and `tube_name`
+        assert_eq!("WATCHING 2\r\n", result);
+
+        let result = beanstalk_proxy.ignore_tube(&tube_name).await.unwrap();
+        assert_eq!("WATCHING 1\r\n", result);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ignore_tube_failure_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        // At least a watched tube is required by beanstankd
+        match beanstalk_proxy.ignore_tube("default").await {
+            Ok(_) => panic!("It wasn't expected to succeed"),
+            Err(beanstalkclient::BeanstalkError::UnexpectedResponse(command, response)) => {
+                assert_eq!("ignore", command);
+                assert_eq!("NOT_IGNORED\r\n", response);
+            },
+            Err(_) => panic!("It was expectected to fail only with a ReservationTimeout")
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn put_test() {
     let (beanstalk_client, beanstalk_proxy) = setup_client().await;
 

@@ -275,6 +275,16 @@ impl BeanstalkProxy {
         }
     }
 
+    pub async fn ignore_tube(&self, tube: &str) -> BeanstalkResult {
+        log::debug!("ignoring tube {}", tube);
+        let command = format!("ignore {}\r\n", tube);
+        let ignore_result = self.exchange(ClientMessageBody { command: command, more_condition: None }).await?;
+        match ignore_result.starts_with("WATCHING ") {
+            true => Ok(ignore_result),
+            false => Err(BeanstalkError::UnexpectedResponse("ignore".to_string(), ignore_result))
+        }
+    }
+
     /// Put a job into the queue
     pub async fn put(&self, job: String) -> BeanstalkResult {
         log::debug!("putting beanstalkd job, {} byte(s)", job.len());
