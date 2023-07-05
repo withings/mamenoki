@@ -15,6 +15,7 @@ const BEANSTALK_MESSAGE_QUEUE_SIZE: usize = 128;
 pub const DEFAULT_PRIORITY: u32 = 0;
 pub const PUT_DEFAULT_DELAY: u32 = 0;
 pub const DEFAULT_TIME_TO_RUN: u32 = 60;
+pub const RESERVE_DEFAULT_TIMEOUT: u32 = 60;
 
 /// A beanstalkd handle
 pub struct Beanstalk {
@@ -282,9 +283,14 @@ impl BeanstalkProxy {
         }
     }
 
-    /// Reserve a job from the queue
+    /// Reserve a job from the queue. It uses the timeout `RESERVE_DEFAULT_TIMEOUT`!
     pub async fn reserve(&self) -> Result<Job, BeanstalkError> {
-        let command_response = self.exchange(ClientMessageBody { command: String::from("reserve-with-timeout 5\r\n"), more_condition: Some("RESERVED".to_string()) }).await?;
+        self.reserve_with_timeout(RESERVE_DEFAULT_TIMEOUT).await
+    }
+
+    pub async fn reserve_with_timeout(&self, timeout: u32) -> Result<Job, BeanstalkError> {
+        let command = format!("reserve-with-timeout {}\r\n", timeout);
+        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("RESERVED".to_string()) }).await?;
         let mut lines = command_response.trim().split("\r\n");
 
         let first_line = lines.next()

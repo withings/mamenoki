@@ -87,6 +87,39 @@ async fn reserve_test() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reserve_with_timeout_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        beanstalk_proxy.put(String::from("job-info")).await.unwrap();
+        let job = beanstalk_proxy.reserve_with_timeout(1).await.unwrap();
+       
+        assert_eq!("job-info", job.payload);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reserve_with_timeout_error_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        match beanstalk_proxy.reserve_with_timeout(0).await {
+            Ok(_) => panic!("It wasn't expected to succeed"),
+            Err(beanstalkclient::BeanstalkError::ReservationTimeout) => {},
+            Err(_) => panic!("It was expectected to fail only with a ReservationTimeout")
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn delete_test() {
     let (beanstalk_client, beanstalk_proxy) = setup_client().await;
 
