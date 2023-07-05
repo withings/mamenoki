@@ -120,6 +120,75 @@ async fn reserve_with_timeout_error_case_test() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn release_with_config_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        beanstalk_proxy.put(String::from("message")).await.unwrap();
+        let job = beanstalk_proxy.reserve().await.unwrap();
+        
+        let release_conf = ReleaseCommandConfig::new(Some(10), Some(120));
+        let res = beanstalk_proxy.release_with_config(job.id, release_conf).await.unwrap();
+
+        assert_eq!("RELEASED\r\n", res);
+
+        let job_stats = beanstalk_proxy.stats_job(job.id).await.unwrap();
+        assert_eq!("delayed", job_stats.state);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn release_with_config_failure_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        let put_result = beanstalk_proxy.put(String::from("message")).await.unwrap();
+        let job_id = job_id_from_put_result(&put_result);
+        
+        let release_conf = ReleaseCommandConfig::new(None, None);
+        match beanstalk_proxy.release_with_config(job_id, release_conf).await {
+            Ok(_) => panic!("release wasn't expected to return an Ok result"),
+            Err(e) => match e {
+                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                    assert_eq!("release", command);
+                    assert_eq!("NOT_FOUND\r\n", response);
+                },
+                _ => panic!("release was expected to return an error of type BeanstalkError::UnexpectedResponse")
+            }
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn release_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+        
+        beanstalk_proxy.put(String::from("message")).await.unwrap();
+        let job = beanstalk_proxy.reserve().await.unwrap();
+        
+        let res = beanstalk_proxy.release(job.id).await.unwrap();
+
+        assert_eq!("RELEASED\r\n", res);
+
+        let job_stats = beanstalk_proxy.stats_job(job.id).await.unwrap();
+        assert_eq!("ready", job_stats.state);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn delete_test() {
     let (beanstalk_client, beanstalk_proxy) = setup_client().await;
 

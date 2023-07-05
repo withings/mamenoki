@@ -163,6 +163,20 @@ impl PutCommandConfig {
     }
 }
 
+pub struct ReleaseCommandConfig {
+    pub priority: u32,
+    pub delay: u32 
+}
+
+impl ReleaseCommandConfig {
+    pub fn new(priority: Option<u32>, delay: Option<u32>) -> Self {
+        Self {
+            priority: priority.unwrap_or(DEFAULT_PRIORITY),
+            delay: delay.unwrap_or(PUT_DEFAULT_DELAY)
+        }
+    }
+}
+
 /// beanstalkd statistics
 #[derive(Serialize, Deserialize)]
 pub struct Statistics {
@@ -281,6 +295,20 @@ impl BeanstalkProxy {
             true => Ok(inserted),
             false => Err(BeanstalkError::UnexpectedResponse("put".to_string(), inserted))
         }
+    }
+
+    pub async fn release_with_config(&self, job_id: u64, config: ReleaseCommandConfig) -> BeanstalkResult {
+        log::debug!("releasing beanstalkd job {}", job_id);
+        let command = format!("release {} {} {}\r\n", job_id, config.priority, config.delay);
+        let release_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        match release_response.starts_with("RELEASED") {
+            true => Ok(release_response),
+            false => Err(BeanstalkError::UnexpectedResponse("release".to_string(), release_response))
+        }
+    }
+
+    pub async fn release(&self, job_id: u64) -> BeanstalkResult {
+        self.release_with_config(job_id, ReleaseCommandConfig::new(None, None)).await
     }
 
     /// Reserve a job from the queue. It uses the timeout `RESERVE_DEFAULT_TIMEOUT`!
