@@ -466,6 +466,23 @@ impl BeanstalkProxy {
         }
     }
 
+    pub async fn list_tubes(&self) -> Result<Vec<String>, BeanstalkError> {
+        log::debug!("listing tubes");
+        let command = String::from("list-tubes\r\n");
+        let list_result = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
+        let mut lines = list_result.trim().split("\r\n");
+
+        let first_line = lines.next()
+            .ok_or(BeanstalkError::UnexpectedResponse(String::from("list-tubes"), "<empty response>".to_string()))?;
+        let parts: Vec<&str> = first_line.trim().split(" ").collect();
+
+        if parts.len() != 2 || parts[0] != "OK" {
+            return Err(BeanstalkError::UnexpectedResponse(String::from("list-tubes"), list_result));
+        }
+        serde_yaml::from_str(&lines.collect::<Vec<&str>>().join("\r\n"))
+            .map_err(|e| BeanstalkError::UnexpectedResponse("list-tubes".to_string(), e.to_string()))
+    }
+
     // private functions //////////////////////////////////////////////////////
 
     async fn peek_from_queue(&self, status: String) -> Result<Option<Job>, BeanstalkError> {
