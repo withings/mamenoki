@@ -410,7 +410,7 @@ async fn kick_job_test() {
         assert_eq!("delayed", job_stats.state);
 
         beanstalk_proxy.kick_job(job_id).await.unwrap();
-        
+
         let job_stats = beanstalk_proxy.stats_job(job_id).await.unwrap();
         assert_eq!("ready", job_stats.state);
     };
@@ -430,6 +430,31 @@ async fn kick_job_not_found_case_test() {
             Ok(_) => panic!("kick_job was not expected to find a job with this id"),
             Err(_) => {}
         }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn kick_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        let delay = 3600;
+        let config = PutCommandConfig::new(None, Some(delay), None);
+        let result = beanstalk_proxy.put_with_config(String::from("job-data"), config).await.unwrap();
+    
+        let job_id = job_id_from_put_result(&result);
+        let job_stats = beanstalk_proxy.stats_job(job_id).await.unwrap();
+        assert_eq!("delayed", job_stats.state);
+
+        let result = beanstalk_proxy.kick(3).await.unwrap();
+        
+        assert_eq!("KICKED 1\r\n", result);
+        let job_stats = beanstalk_proxy.stats_job(job_id).await.unwrap();
+        assert_eq!("ready", job_stats.state);
     };
     
     run_testing_code(beanstalk_client, testing_code).await;
