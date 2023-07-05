@@ -365,10 +365,30 @@ async fn peek_delayed_test() {
         
         let config = PutCommandConfig::new(None, Some(600), None);
         beanstalk_proxy.put(String::from("a-ready-job")).await.unwrap();
-        beanstalk_proxy.put_with_config(String::from("a-delaied-job"), config).await.unwrap();
+        beanstalk_proxy.put_with_config(String::from("a-delayed-job"), config).await.unwrap();
 
         let job = beanstalk_proxy.peek_delayed().await.unwrap().unwrap();
-        assert_eq!("a-delaied-job", job.payload);
+        assert_eq!("a-delayed-job", job.payload);
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn peek_buried_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        beanstalk_proxy.put(String::from("a-buried-job")).await.unwrap();
+        beanstalk_proxy.put(String::from("a-ready-job")).await.unwrap();
+
+        let job = beanstalk_proxy.reserve().await.unwrap();
+        beanstalk_proxy.bury(job.id).await.unwrap();
+
+        let job = beanstalk_proxy.peek_buried().await.unwrap().unwrap();
+        assert_eq!("a-buried-job", job.payload);
     };
     
     run_testing_code(beanstalk_client, testing_code).await;

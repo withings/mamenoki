@@ -337,6 +337,11 @@ impl BeanstalkProxy {
         self.peek_from_queue(String::from("delayed")).await
     }
 
+    /// Peek the next buried job, if any
+    pub async fn peek_buried(&self) -> Result<Option<Job>, BeanstalkError> {
+        self.peek_from_queue(String::from("buried")).await
+    }
+
     /// Delete a job from the queue
     pub async fn delete(&self, id: u64) -> BeanstalkResult {
         log::debug!("deleting job ID {}", id);
