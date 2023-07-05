@@ -352,6 +352,16 @@ impl BeanstalkProxy {
         }
     }
 
+    /// Kick a job from the buried or delayed queue to the ready queue
+    pub async fn kick_job(&self, id: u64) -> BeanstalkResult {
+        log::debug!("kicking job ID {}", id);
+        let kick_response = self.exchange(ClientMessageBody { command: format!("kick-job {}\r\n", id), more_condition: None }).await?;
+        match kick_response.starts_with("KICKED") {
+            true => Ok(kick_response),
+            false => Err(BeanstalkError::UnexpectedResponse("kick-job".to_string(), kick_response))
+        }
+    }
+
     /// Get server stats
     pub async fn stats(&self) -> Result<Statistics, BeanstalkError> {
         let command_name = String::from("stats");
