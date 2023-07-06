@@ -8,6 +8,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use serde_yaml;
+use serde::de::DeserializeOwned;
 use log;
 
 /// Queue size limit for messages to a Beanstalk channel
@@ -31,7 +32,7 @@ pub struct Beanstalk {
 #[derive(Error, Debug)]
 pub enum BeanstalkError {
     #[error("the internal queue to Beanstalk is not available: {0}")]
-    QueueUnvailable(String),
+    QueueUnavailable(String),
     #[error("a return channel has failed to receive a Beanstalk response: {0}")]
     ReturnChannelFailure(String),
     #[error("unexpected response from Beanstalk for command {0}: {1}")]
@@ -42,7 +43,7 @@ pub enum BeanstalkError {
     ReservationTimeout,
 }
 
-/// Convenience struct: copy of the channel's transmissiting end, with some methods
+/// Convenience struct: copy of the channel's transmitting end, with some methods
 #[derive(Clone)]
 pub struct BeanstalkProxy {
     request_tx: mpsc::Sender<ClientMessage>
@@ -150,6 +151,7 @@ pub struct Job {
     pub payload: String
 }
 
+/// Configuration to customize the insertion of a new task with the `put` command 
 pub struct PutCommandConfig {
     pub priority: u32,
     pub delay: u32,
@@ -166,6 +168,7 @@ impl PutCommandConfig {
     }
 }
 
+/// Configuration to customize the release of a task with the `release` command
 pub struct ReleaseCommandConfig {
     pub priority: u32,
     pub delay: u32 
@@ -250,14 +253,6 @@ pub struct TubeStatistics {
 }
 
 impl BeanstalkProxy {
-    /// Low level channel exchange: send a message body over the channel and wait for a reply
-    async fn exchange(&self, body: ClientMessageBody) -> BeanstalkResult {
-        let (tx, rx) = oneshot::channel::<BeanstalkResult>();
-        self.request_tx.send(ClientMessage { return_tx: tx, body }).await
-            .map_err(|e| BeanstalkError::QueueUnvailable(e.to_string()))?;
-        rx.await.map_err(|e| BeanstalkError::ReturnChannelFailure(e.to_string()))?
-    }
-
     /// Ask beanstalk to USE a tube on this connection
     pub async fn use_tube(&self, tube: &str) -> BeanstalkResult {
         log::debug!("using tube {}", tube);
@@ -278,6 +273,9 @@ impl BeanstalkProxy {
         }
     }
 
+    /// Ask beanstalk to IGNORE a tube on this connection.
+    /// 
+    /// It will return an error in case the tube was not watched.
     pub async fn ignore_tube(&self, tube: &str) -> BeanstalkResult {
         log::debug!("ignoring tube {}", tube);
         let command = format!("ignore {}\r\n", tube);
@@ -293,7 +291,7 @@ impl BeanstalkProxy {
         self.put_with_config(job, PutCommandConfig::new(None, None, None)).await
     }
 
-    /// Put a job into the queue, with a custom configuration
+    /// Put a job into the queue with a custom configuration
     pub async fn put_with_config(&self, job: String, config: PutCommandConfig) -> BeanstalkResult {
         log::debug!("putting beanstalkd job, {} byte(s)", job.len());
         let command = format!("put {} {} {} {}\r\n{}\r\n", config.priority, config.delay, config.time_to_run, job.len(), job);
@@ -304,6 +302,12 @@ impl BeanstalkProxy {
         }
     }
 
+    /// Release a job that was previously reserved
+    pub async fn release(&self, job_id: JobId) -> BeanstalkResult {
+        self.release_with_config(job_id, ReleaseCommandConfig::new(None, None)).await
+    }
+
+    /// Release a job that was previously reserved with a custom configuration
     pub async fn release_with_config(&self, job_id: JobId, config: ReleaseCommandConfig) -> BeanstalkResult {
         log::debug!("releasing beanstalkd job {}", job_id);
         let command = format!("release {} {} {}\r\n", job_id, config.priority, config.delay);
@@ -314,15 +318,12 @@ impl BeanstalkProxy {
         }
     }
 
-    pub async fn release(&self, job_id: JobId) -> BeanstalkResult {
-        self.release_with_config(job_id, ReleaseCommandConfig::new(None, None)).await
-    }
-
     /// Reserve a job from the queue. It uses the timeout `RESERVE_DEFAULT_TIMEOUT`!
     pub async fn reserve(&self) -> Result<Job, BeanstalkError> {
         self.reserve_with_timeout(RESERVE_DEFAULT_TIMEOUT).await
     }
 
+    /// Reserve a job from the queue with the given `timeout`
     pub async fn reserve_with_timeout(&self, timeout: u32) -> Result<Job, BeanstalkError> {
         let command = format!("reserve-with-timeout {}\r\n", timeout);
         let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("RESERVED".to_string()) }).await?;
@@ -420,33 +421,21 @@ impl BeanstalkProxy {
     pub async fn stats(&self) -> Result<Statistics, BeanstalkError> {
         let command_name = String::from("stats");
         let command = format!("{}\r\n", command_name);
-        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
-        
-        let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
-        serde_yaml::from_str(&stats_yaml)
-            .map_err(|e| BeanstalkError::UnexpectedResponse("stats".to_string(), e.to_string()))
+        self.stats_by_command(command, command_name).await
     }
 
     /// Get the stats for a job
     pub async fn stats_job(&self, id: JobId) -> Result<JobStatistics, BeanstalkError> {
         let command_name = String::from("stats-job");
         let command = format!("{} {}\r\n", command_name, id);
-        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
-
-        let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
-        serde_yaml::from_str(&stats_yaml)
-            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
+        self.stats_by_command(command, command_name).await
     }
 
     /// Get the stats for a tube
     pub async fn stats_tube(&self, tube_name: &String) -> Result<TubeStatistics, BeanstalkError> {
         let command_name = String::from("stats-tube");
         let command = format!("{} {}\r\n", command_name, tube_name);
-        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
-
-        let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
-        serde_yaml::from_str(&stats_yaml)
-            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
+        self.stats_by_command(command, command_name).await
     }
 
     /// Bury a job from the queue
@@ -476,7 +465,7 @@ impl BeanstalkProxy {
         self.list_tubes_by_command(String::from("list-tubes")).await
     }
 
-    /// list tubes currently being watched by the client
+    /// Get the list of tubes currently being watched by the client
     pub async fn list_tubes_watched(&self) -> Result<Vec<String>, BeanstalkError> {
         self.list_tubes_by_command(String::from("list-tubes-watched")).await
     }
@@ -496,7 +485,7 @@ impl BeanstalkProxy {
         Ok(String::from(result_parts[1]))
     }
 
-    /// delay any new job being reserved for a given time
+    /// Delay any new job being reserved for a given time
     pub async fn pause_tube(&self, tube: &str, delay: u32) -> BeanstalkResult {
         log::debug!("pausing tube");
         let command = format!("pause-tube {} {}\r\n", tube, delay);
@@ -510,6 +499,15 @@ impl BeanstalkProxy {
 
     // private functions //////////////////////////////////////////////////////
 
+    /// Low level channel exchange: send a message body over the channel and wait for a reply
+    async fn exchange(&self, body: ClientMessageBody) -> BeanstalkResult {
+        let (tx, rx) = oneshot::channel::<BeanstalkResult>();
+        self.request_tx.send(ClientMessage { return_tx: tx, body }).await
+            .map_err(|e| BeanstalkError::QueueUnavailable(e.to_string()))?;
+        rx.await.map_err(|e| BeanstalkError::ReturnChannelFailure(e.to_string()))?
+    }
+
+    /// Peek a job from a status queue (ready, delayed and buried queue)
     async fn peek_from_queue(&self, status: String) -> Result<Option<Job>, BeanstalkError> {
         let command_name = format!("peek-{}", status);
         let command_response = self.exchange(ClientMessageBody { command: format!("{}\r\n", command_name), more_condition: Some("FOUND".to_string()) }).await?;
@@ -538,6 +536,7 @@ impl BeanstalkProxy {
         }
     }
 
+    /// Get the list of tubes using different commands, as `list-tubes` or `list-tubes-watched`
     async fn list_tubes_by_command(&self, command: String) -> Result<Vec<String>, BeanstalkError> {
         log::debug!("listing tubes with {}", command);
         let message = ClientMessageBody { command: format!("{}\r\n", command), more_condition: Some("OK".to_string()) };
@@ -555,7 +554,11 @@ impl BeanstalkProxy {
             .map_err(|e| BeanstalkError::UnexpectedResponse(command, e.to_string()))
     }
 
-    fn extract_stats_response(command_name: String, command_response: String) -> Result<String, BeanstalkError> {
+    /// Get the stats using different commands, as `stats` or `stats-job` or `stats-tube`
+    async fn stats_by_command<T>(&self, command: String, command_name: String) -> Result<T, BeanstalkError> 
+            where T: DeserializeOwned {
+        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
+
         let mut lines = command_response.trim().split("\r\n");
 
         let first_line = lines.next()
@@ -566,6 +569,8 @@ impl BeanstalkProxy {
             return Err(BeanstalkError::UnexpectedResponse(command_name, command_response));
         }
 
-        Ok(lines.collect::<Vec<&str>>().join("\r\n"))
+        let stats_yaml = lines.collect::<Vec<&str>>().join("\r\n");
+        serde_yaml::from_str(&stats_yaml)
+            .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
     } 
 }
