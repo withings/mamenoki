@@ -290,13 +290,7 @@ impl BeanstalkProxy {
 
     /// Put a job into the queue
     pub async fn put(&self, job: String) -> BeanstalkResult {
-        log::debug!("putting beanstalkd job, {} byte(s)", job.len());
-        let command = format!("put {} {} {} {}\r\n{}\r\n", DEFAULT_PRIORITY, PUT_DEFAULT_DELAY, DEFAULT_TIME_TO_RUN, job.len(), job);
-        let inserted = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
-        match inserted.starts_with("INSERTED ") {
-            true => Ok(inserted),
-            false => Err(BeanstalkError::UnexpectedResponse("put".to_string(), inserted))
-        }
+        self.put_with_config(job, PutCommandConfig::new(None, None, None)).await
     }
 
     /// Put a job into the queue, with a custom configuration
