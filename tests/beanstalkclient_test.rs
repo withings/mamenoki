@@ -53,14 +53,14 @@ async fn ignore_tube_failure_case_test() {
     let (beanstalk_client, beanstalk_proxy) = setup_client().await;
 
     let testing_code = async {
-        // At least a watched tube is required by beanstankd
+        // At least a watched tube is required by beanstalkd
         match beanstalk_proxy.ignore_tube("default").await {
             Ok(_) => panic!("It wasn't expected to succeed"),
             Err(beanstalkclient::BeanstalkError::UnexpectedResponse(command, response)) => {
                 assert_eq!("ignore", command);
                 assert_eq!("NOT_IGNORED\r\n", response);
             },
-            Err(_) => panic!("It was expectected to fail only with a ReservationTimeout")
+            Err(_) => panic!("It was expected to fail only with a ReservationTimeout")
         }
     };
     
@@ -76,7 +76,7 @@ async fn put_test() {
 
         let result = beanstalk_proxy.put(String::from("job-web-event")).await.unwrap();
     
-        // expect that containg INSERTED followed by the id of the created job
+        // expect that containing INSERTED followed by the id of the created job
         let regex = Regex::new(r"INSERTED \d+\r\n").unwrap();
         assert!(regex.is_match(&result));
     };
@@ -149,7 +149,7 @@ async fn reserve_with_timeout_error_case_test() {
         match beanstalk_proxy.reserve_with_timeout(0).await {
             Ok(_) => panic!("It wasn't expected to succeed"),
             Err(beanstalkclient::BeanstalkError::ReservationTimeout) => {},
-            Err(_) => panic!("It was expectected to fail only with a ReservationTimeout")
+            Err(_) => panic!("It was expected to fail only with a ReservationTimeout")
         }
     };
     
@@ -661,7 +661,7 @@ async fn pause_tube_test() {
         match beanstalk_proxy.reserve_with_timeout(0).await {
             Ok(_) => panic!("reserve was expected to fail because all the jobs were delayed by the pause command"),
             Err(beanstalkclient::BeanstalkError::ReservationTimeout) => { },
-            Err(_) => panic!("It was expectected to fail only with a ReservationTimeout")
+            Err(_) => panic!("It was expected to fail only with a ReservationTimeout")
         }
     };
     
@@ -684,7 +684,7 @@ async fn pause_tube_failure_case_test() {
                 assert_eq!("pause-tube", command);
                 assert_eq!("NOT_FOUND\r\n", response);
             },
-            Err(_) => panic!("It was expectected to fail only with a UnexpectedResponse")
+            Err(_) => panic!("It was expected to fail only with a UnexpectedResponse")
         }
     };
     
