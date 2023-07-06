@@ -466,21 +466,14 @@ impl BeanstalkProxy {
         }
     }
 
+    /// Get the list of all existing tubes
     pub async fn list_tubes(&self) -> Result<Vec<String>, BeanstalkError> {
-        log::debug!("listing tubes");
-        let command = String::from("list-tubes\r\n");
-        let list_result = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
-        let mut lines = list_result.trim().split("\r\n");
+        self.list_tubes_by_command(String::from("list-tubes")).await
+    }
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse(String::from("list-tubes"), "<empty response>".to_string()))?;
-        let parts: Vec<&str> = first_line.trim().split(" ").collect();
-
-        if parts.len() != 2 || parts[0] != "OK" {
-            return Err(BeanstalkError::UnexpectedResponse(String::from("list-tubes"), list_result));
-        }
-        serde_yaml::from_str(&lines.collect::<Vec<&str>>().join("\r\n"))
-            .map_err(|e| BeanstalkError::UnexpectedResponse("list-tubes".to_string(), e.to_string()))
+    /// list tubes currently being watched by the client
+    pub async fn list_tubes_watched(&self) -> Result<Vec<String>, BeanstalkError> {
+        self.list_tubes_by_command(String::from("list-tubes-watched")).await
     }
 
     // private functions //////////////////////////////////////////////////////
@@ -511,6 +504,23 @@ impl BeanstalkProxy {
             "NOT_FOUND" => Ok(None),
             _ => Err(BeanstalkError::UnexpectedResponse("peek".to_string(), command_response))
         }
+    }
+
+    async fn list_tubes_by_command(&self, command: String) -> Result<Vec<String>, BeanstalkError> {
+        log::debug!("listing tubes with {}", command);
+        let message = ClientMessageBody { command: format!("{}\r\n", command), more_condition: Some("OK".to_string()) };
+        let list_result = self.exchange(message).await?;
+        let mut lines = list_result.trim().split("\r\n");
+
+        let first_line = lines.next()
+            .ok_or(BeanstalkError::UnexpectedResponse(command.clone(), "<empty response>".to_string()))?;
+        let parts: Vec<&str> = first_line.trim().split(" ").collect();
+
+        if parts.len() != 2 || parts[0] != "OK" {
+            return Err(BeanstalkError::UnexpectedResponse(command.clone(), list_result));
+        }
+        serde_yaml::from_str(&lines.collect::<Vec<&str>>().join("\r\n"))
+            .map_err(|e| BeanstalkError::UnexpectedResponse(command, e.to_string()))
     }
 
     fn extract_stats_response(command_name: String, command_response: String) -> Result<String, BeanstalkError> {
