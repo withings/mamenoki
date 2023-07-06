@@ -1,6 +1,6 @@
-//! connection_and_request example client.
+//! connection_and_request example.
 //!
-//! An example client that uses the beanstalkclient library
+//! This is a usage example of the beanstalkclient library
 //!
 //! Run in a terminal:
 //!
@@ -11,12 +11,12 @@
 use core::time::Duration;
 use std::time::SystemTime;
 
-use beanstalkclient::{Beanstalk, BeanstalkError};
+use beanstalkclient::{BeanstalkChannel, BeanstalkError};
 use tracing_subscriber;
 
-const PRODUCER_WAIT_TIME_MILLIS: u64 = 3500;
-const RESERVE_FAILURE_WAIT_TIME_S: u64 = 1;
-const STATS_WAIT_TIME_S: u64 = 15;
+const PRODUCER_WAIT_TIME_MILLISEC: u64 = 3500;
+const RESERVE_FAILURE_WAIT_TIME_SEC: u64 = 1;
+const STATS_WAIT_TIME_SEC: u64 = 15;
 
 #[tokio::main]
 pub async fn main() {
@@ -31,7 +31,7 @@ pub async fn main() {
     let beanstalkd_addr = String::from("localhost:11300");
 
     // Creating the connection to add jobs to the beanstalkd
-    let mut bstk_writer = match Beanstalk::connect(&beanstalkd_addr).await {
+    let mut bstk_writer = match BeanstalkChannel::connect(&beanstalkd_addr).await {
         Ok(b) => {
             log::info!("Connection to beanstalkd for writing created");
             b
@@ -43,7 +43,7 @@ pub async fn main() {
     };
 
     // Creating the connection to get jobs and stats from beanstalkd
-    let mut bstk_reader = match Beanstalk::connect(&beanstalkd_addr).await {
+    let mut bstk_reader = match BeanstalkChannel::connect(&beanstalkd_addr).await {
         Ok(b) => {
             log::info!("Connection to beanstalkd for reading created");
             b
@@ -54,20 +54,20 @@ pub async fn main() {
         }
     };
 
-    let writer_proxy = bstk_writer.proxy();
-    let reader_proxy = bstk_reader.proxy();
+    let writer_client = bstk_writer.create_client();
+    let reader_client = bstk_reader.create_client();
 
     tokio::join!(
         bstk_reader.run_channel(),
         bstk_writer.run_channel(),
         async {
             /* once the PUT channel is ready (has processed the USE command), start writing jobs */
-            match writer_proxy.use_tube("example_connection_and_request").await {
+            match writer_client.use_tube("example_connection_and_request").await {
                 Ok(_) => {
                     log::info!("writer ready to add jobs!");
                     loop {
                         let event = format!("job-{}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs());
-                        match writer_proxy.put(String::from(event)).await {
+                        match writer_client.put(String::from(event)).await {
                             Ok(reply) => {
                                 log::info!("Job written to beanstalkd - reply: {}", reply);
                             },
@@ -75,7 +75,7 @@ pub async fn main() {
                                 log::warn!("Could not enqueue job: {}", e);
                             }
                         };
-                        tokio::time::sleep(Duration::from_millis(PRODUCER_WAIT_TIME_MILLIS)).await;
+                        tokio::time::sleep(Duration::from_millis(PRODUCER_WAIT_TIME_MILLISEC)).await;
                     }
                 },
                 Err(e) => {
@@ -86,23 +86,23 @@ pub async fn main() {
         },
         async {
             /* same for WATCH and the forwarder/worker */
-            match reader_proxy.watch_tube("example_connection_and_request").await {
+            match reader_client.watch_tube("example_connection_and_request").await {
                 Ok(_) => {
                     log::info!("reader ready for jobs!");
                     loop {
-                        let job = match reader_proxy.reserve().await {
+                        let job = match reader_client.reserve().await {
                             Ok(j) => j,
                             Err(BeanstalkError::ReservationTimeout) => continue,
                             Err(e) => {
                                 log::warn!("failed to reserve job, will try again soon: {}", e);
-                                tokio::time::sleep(Duration::from_secs(RESERVE_FAILURE_WAIT_TIME_S)).await;
+                                tokio::time::sleep(Duration::from_secs(RESERVE_FAILURE_WAIT_TIME_SEC)).await;
                                 continue;
                             }
                         };
                 
                         /* Immediately delete the job, whatever happens next */
                         log::debug!("new job from beanstalkd: {}", job.payload);
-                        if let Err(e) = reader_proxy.delete(job.id).await {
+                        if let Err(e) = reader_client.delete(job.id).await {
                             log::error!("failed to delete job, will process anyway: {}", e);
                         }
                     }
@@ -116,7 +116,7 @@ pub async fn main() {
         async {
             // Get the stats from Beanstalkd and print them
             loop {
-                match reader_proxy.stats().await {
+                match reader_client.stats().await {
                     Ok(stats) => {
                         log::debug!("beanstalkd stats: jobs_ready: {}, jobs_reserved: {}, jobs_delayed: {}, total_jobs: {}, current_connections: {}", 
                             stats.jobs_ready, stats.jobs_reserved, stats.jobs_delayed, stats.total_jobs, stats.current_connections);
@@ -129,7 +129,7 @@ pub async fn main() {
                     }
                 };
                 
-                tokio::time::sleep(Duration::from_secs(STATS_WAIT_TIME_S)).await;
+                tokio::time::sleep(Duration::from_secs(STATS_WAIT_TIME_SEC)).await;
             }
         }
     );

@@ -18,8 +18,8 @@ pub const PUT_DEFAULT_DELAY: u32 = 0;
 pub const DEFAULT_TIME_TO_RUN: u32 = 60;
 pub const RESERVE_DEFAULT_TIMEOUT: u32 = 60;
 
-/// A beanstalkd handle
-pub struct Beanstalk {
+/// An handle to the beanstalkd TCP stream and the Tokio mpsc channels
+pub struct BeanstalkChannel {
     /// TCP stream to beanstalkd
     stream: TcpStream,
     /// The receiving end for messages, used by run_channel
@@ -43,9 +43,10 @@ pub enum BeanstalkError {
     ReservationTimeout,
 }
 
-/// Convenience struct: copy of the channel's transmitting end, with some methods
+/// Convenience struct: copy of the channel's transmitting end,
+/// with all the methods which allow to send the commands to a beanstalkd server. 
 #[derive(Clone)]
-pub struct BeanstalkProxy {
+pub struct BeanstalkClient {
     request_tx: mpsc::Sender<ClientMessage>
 }
 
@@ -65,7 +66,7 @@ struct ClientMessageBody {
     more_condition: Option<String>,
 }
 
-impl Beanstalk {
+impl BeanstalkChannel {
     /// Connects to beanstalkd
     pub async fn connect(addr: &String) -> std::io::Result<Self> {
         log::debug!("connecting to beanstalkd at {}", addr);
@@ -77,8 +78,8 @@ impl Beanstalk {
     }
 
     /// Provides a clone of the channel's tx, for use by any task
-    pub fn proxy(&self) -> BeanstalkProxy {
-        BeanstalkProxy { request_tx: self.tx.clone() }
+    pub fn create_client(&self) -> BeanstalkClient {
+        BeanstalkClient { request_tx: self.tx.clone() }
     }
 
     /// The channel which owns the actual connection and processes messages
@@ -252,7 +253,7 @@ pub struct TubeStatistics {
     pub pause_time_left: u32
 }
 
-impl BeanstalkProxy {
+impl BeanstalkClient {
     /// Ask beanstalk to USE a tube on this connection
     pub async fn use_tube(&self, tube: &str) -> BeanstalkResult {
         log::debug!("using tube {}", tube);
