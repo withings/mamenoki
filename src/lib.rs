@@ -141,9 +141,12 @@ impl Beanstalk {
     }
 }
 
+/// The Id type for a beanstalk job
+pub type JobId = u64;
+
 /// A beanstalk job
 pub struct Job {
-    pub id: u64,
+    pub id: JobId,
     pub payload: String
 }
 
@@ -196,7 +199,7 @@ pub struct Statistics {
 /// job statistics
 #[derive(Serialize, Deserialize)]
 pub struct JobStatistics {
-    pub id: u64,
+    pub id: JobId,
     pub tube: String,
     pub state: String, // "ready" or "delayed" or "reserved" or "buried"
     #[serde(rename = "pri")]
@@ -307,7 +310,7 @@ impl BeanstalkProxy {
         }
     }
 
-    pub async fn release_with_config(&self, job_id: u64, config: ReleaseCommandConfig) -> BeanstalkResult {
+    pub async fn release_with_config(&self, job_id: JobId, config: ReleaseCommandConfig) -> BeanstalkResult {
         log::debug!("releasing beanstalkd job {}", job_id);
         let command = format!("release {} {} {}\r\n", job_id, config.priority, config.delay);
         let release_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
@@ -317,7 +320,7 @@ impl BeanstalkProxy {
         }
     }
 
-    pub async fn release(&self, job_id: u64) -> BeanstalkResult {
+    pub async fn release(&self, job_id: JobId) -> BeanstalkResult {
         self.release_with_config(job_id, ReleaseCommandConfig::new(None, None)).await
     }
 
@@ -343,7 +346,7 @@ impl BeanstalkProxy {
             return Err(BeanstalkError::UnexpectedResponse("reserve".to_string(), command_response));
         }
 
-        let id = parts[1].parse::<u64>()
+        let id = parts[1].parse::<JobId>()
             .map_err(|_| BeanstalkError::UnexpectedResponse("reserve".to_string(), command_response.clone()))?;
 
         Ok(Job {
@@ -353,7 +356,7 @@ impl BeanstalkProxy {
     }
 
     /// Peek a job by id
-    pub async fn peek(&self, job_id: u64) -> Result<Job, BeanstalkError> {
+    pub async fn peek(&self, job_id: JobId) -> Result<Job, BeanstalkError> {
         let command = format!("peek {}\r\n", job_id);
         let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("FOUND".to_string()) }).await?;
         let mut lines = command_response.trim().split("\r\n");
@@ -388,7 +391,7 @@ impl BeanstalkProxy {
     }
 
     /// Delete a job from the queue
-    pub async fn delete(&self, id: u64) -> BeanstalkResult {
+    pub async fn delete(&self, id: JobId) -> BeanstalkResult {
         log::debug!("deleting job ID {}", id);
         let deleted = self.exchange(ClientMessageBody { command: format!("delete {}\r\n", id), more_condition: None }).await?;
         match deleted.starts_with("DELETED") {
@@ -398,7 +401,7 @@ impl BeanstalkProxy {
     }
 
     /// Kick a job from the buried or delayed queue to the ready queue
-    pub async fn kick_job(&self, id: u64) -> BeanstalkResult {
+    pub async fn kick_job(&self, id: JobId) -> BeanstalkResult {
         log::debug!("kicking job ID {}", id);
         let command = format!("kick-job {}\r\n", id);
         let kick_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
@@ -431,7 +434,7 @@ impl BeanstalkProxy {
     }
 
     /// Get the stats for a job
-    pub async fn stats_job(&self, id: u64) -> Result<JobStatistics, BeanstalkError> {
+    pub async fn stats_job(&self, id: JobId) -> Result<JobStatistics, BeanstalkError> {
         let command_name = String::from("stats-job");
         let command = format!("{} {}\r\n", command_name, id);
         let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
@@ -453,7 +456,7 @@ impl BeanstalkProxy {
     }
 
     /// Bury a job from the queue
-    pub async fn bury(&self, id: u64) -> BeanstalkResult {
+    pub async fn bury(&self, id: JobId) -> BeanstalkResult {
         log::debug!("burying job ID {}", id);
         let command = format!("bury {} {}\r\n", id, DEFAULT_PRIORITY);
         let buried = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
@@ -464,7 +467,7 @@ impl BeanstalkProxy {
     }
 
     /// Touch a reserved job
-    pub async fn touch(&self, id: u64) -> BeanstalkResult {
+    pub async fn touch(&self, id: JobId) -> BeanstalkResult {
         log::debug!("touching job ID {}", id);
         let command = format!("touch {}\r\n", id);
         let touched = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
@@ -528,7 +531,7 @@ impl BeanstalkProxy {
                     return Err(BeanstalkError::UnexpectedResponse(command_name.clone(), command_response));
                 }
         
-                let id = parts[1].parse::<u64>()
+                let id = parts[1].parse::<JobId>()
                     .map_err(|_| BeanstalkError::UnexpectedResponse(command_name, command_response.clone()))?;
         
                 Ok(Some(Job {

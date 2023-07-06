@@ -731,8 +731,8 @@ async fn run_testing_code(mut beanstalk: Beanstalk, testing_code: impl core::fut
     };
 }
 
-fn job_id_from_put_result(put_result:  &String) -> u64 {
+fn job_id_from_put_result(put_result:  &String) -> JobId {
     let extract_id_regex = Regex::new(r"INSERTED (\d+)\r\n").unwrap();
     let caps = extract_id_regex.captures(put_result).unwrap();
-    caps.get(1).unwrap().as_str().parse::<u64>().unwrap()
+    caps.get(1).unwrap().as_str().parse::<JobId>().unwrap()
 }
