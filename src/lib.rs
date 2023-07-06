@@ -354,7 +354,8 @@ impl BeanstalkProxy {
 
     /// Peek a job by id
     pub async fn peek(&self, job_id: u64) -> Result<Job, BeanstalkError> {
-        let command_response = self.exchange(ClientMessageBody { command: format!("peek {}\r\n", job_id), more_condition: Some("FOUND".to_string()) }).await?;
+        let command = format!("peek {}\r\n", job_id);
+        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("FOUND".to_string()) }).await?;
         let mut lines = command_response.trim().split("\r\n");
 
         let first_line = lines.next()
@@ -399,7 +400,8 @@ impl BeanstalkProxy {
     /// Kick a job from the buried or delayed queue to the ready queue
     pub async fn kick_job(&self, id: u64) -> BeanstalkResult {
         log::debug!("kicking job ID {}", id);
-        let kick_response = self.exchange(ClientMessageBody { command: format!("kick-job {}\r\n", id), more_condition: None }).await?;
+        let command = format!("kick-job {}\r\n", id);
+        let kick_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
         match kick_response.starts_with("KICKED") {
             true => Ok(kick_response),
             false => Err(BeanstalkError::UnexpectedResponse("kick-job".to_string(), kick_response))
@@ -409,7 +411,8 @@ impl BeanstalkProxy {
     /// Kick at most `bound` jobs from the buried or delayed queue to the ready queue
     pub async fn kick(&self, bound: u64) -> BeanstalkResult {
         log::debug!("kicking {} jobs", bound);
-        let kick_response = self.exchange(ClientMessageBody { command: format!("kick {}\r\n", bound), more_condition: None }).await?;
+        let command = format!("kick {}\r\n", bound);
+        let kick_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
         match kick_response.starts_with("KICKED") {
             true => Ok(kick_response),
             false => Err(BeanstalkError::UnexpectedResponse("kick".to_string(), kick_response))
@@ -419,7 +422,8 @@ impl BeanstalkProxy {
     /// Get server stats
     pub async fn stats(&self) -> Result<Statistics, BeanstalkError> {
         let command_name = String::from("stats");
-        let command_response = self.exchange(ClientMessageBody { command: format!("{}\r\n", command_name), more_condition: Some("OK".to_string()) }).await?;
+        let command = format!("{}\r\n", command_name);
+        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
         
         let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
         serde_yaml::from_str(&stats_yaml)
@@ -429,7 +433,8 @@ impl BeanstalkProxy {
     /// Get the stats for a job
     pub async fn stats_job(&self, id: u64) -> Result<JobStatistics, BeanstalkError> {
         let command_name = String::from("stats-job");
-        let command_response = self.exchange(ClientMessageBody { command: format!("{} {}\r\n", command_name, id), more_condition: Some("OK".to_string()) }).await?;
+        let command = format!("{} {}\r\n", command_name, id);
+        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
 
         let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
         serde_yaml::from_str(&stats_yaml)
@@ -439,7 +444,8 @@ impl BeanstalkProxy {
     /// Get the stats for a tube
     pub async fn stats_tube(&self, tube_name: &String) -> Result<TubeStatistics, BeanstalkError> {
         let command_name = String::from("stats-tube");
-        let command_response = self.exchange(ClientMessageBody { command: format!("{} {}\r\n", command_name, tube_name), more_condition: Some("OK".to_string()) }).await?;
+        let command = format!("{} {}\r\n", command_name, tube_name);
+        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
 
         let stats_yaml = Self::extract_stats_response(command_name, command_response)?;
         serde_yaml::from_str(&stats_yaml)
@@ -449,7 +455,8 @@ impl BeanstalkProxy {
     /// Bury a job from the queue
     pub async fn bury(&self, id: u64) -> BeanstalkResult {
         log::debug!("burying job ID {}", id);
-        let buried = self.exchange(ClientMessageBody { command: format!("bury {} {}\r\n", id, DEFAULT_PRIORITY), more_condition: None }).await?;
+        let command = format!("bury {} {}\r\n", id, DEFAULT_PRIORITY);
+        let buried = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
         match buried.starts_with("BURIED") {
             true => Ok(buried),
             false => Err(BeanstalkError::UnexpectedResponse("bury".to_string(), buried))
@@ -459,7 +466,8 @@ impl BeanstalkProxy {
     /// Touch a reserved job
     pub async fn touch(&self, id: u64) -> BeanstalkResult {
         log::debug!("touching job ID {}", id);
-        let touched = self.exchange(ClientMessageBody { command: format!("touch {}\r\n", id), more_condition: None }).await?;
+        let command = format!("touch {}\r\n", id);
+        let touched = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
         match touched.starts_with("TOUCHED") {
             true => Ok(touched),
             false => Err(BeanstalkError::UnexpectedResponse("touch".to_string(), touched))
@@ -489,6 +497,18 @@ impl BeanstalkProxy {
         }
 
         Ok(String::from(result_parts[1]))
+    }
+
+    /// delay any new job being reserved for a given time
+    pub async fn pause_tube(&self, tube: &str, delay: u32) -> BeanstalkResult {
+        log::debug!("pausing tube");
+        let command = format!("pause-tube {} {}\r\n", tube, delay);
+        let pause_result = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+
+        match pause_result.starts_with("PAUSED") {
+            true => Ok(pause_result),
+            false => Err(BeanstalkError::UnexpectedResponse("pause-tube".to_string(), pause_result))
+        }
     }
 
     // private functions //////////////////////////////////////////////////////

@@ -647,6 +647,50 @@ async fn kick_test() {
     run_testing_code(beanstalk_client, testing_code).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pause_tube_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        let tube_name = in_new_testing_tube(&beanstalk_proxy).await;
+
+        beanstalk_proxy.put(String::from("job-data")).await.unwrap();
+
+        beanstalk_proxy.pause_tube(&tube_name, 60).await.unwrap();
+
+        match beanstalk_proxy.reserve_with_timeout(0).await {
+            Ok(_) => panic!("reserve was expected to fail because all the jobs were delayed by the pause command"),
+            Err(beanstalkclient::BeanstalkError::ReservationTimeout) => { },
+            Err(_) => panic!("It was expectected to fail only with a ReservationTimeout")
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pause_tube_failure_case_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        in_new_testing_tube(&beanstalk_proxy).await;
+
+        beanstalk_proxy.put(String::from("job-data")).await.unwrap();
+
+        match beanstalk_proxy.pause_tube("name-of-a-not-existing-tube", 5).await {
+            Ok(_) => panic!("pause_tube was expected to fail because the tube does not exist"),
+            Err(beanstalkclient::BeanstalkError::UnexpectedResponse(command, response)) => {
+                assert_eq!("pause-tube", command);
+                assert_eq!("NOT_FOUND\r\n", response);
+            },
+            Err(_) => panic!("It was expectected to fail only with a UnexpectedResponse")
+        }
+    };
+    
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
 #[test]
 fn put_command_config_defaults_test() {
     let config = PutCommandConfig::new(None, None, None);
