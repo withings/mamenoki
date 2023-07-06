@@ -365,13 +365,26 @@ async fn list_tubes_watched_test() {
     let testing_code = async {
         let tube_name = in_new_testing_tube(&beanstalk_proxy).await;
 
-        beanstalk_proxy.put(String::from("a-job")).await.unwrap();
-
         let tube_stats = beanstalk_proxy.list_tubes_watched().await.unwrap();
         
         assert!(tube_stats.contains(&tube_name));
         assert!(tube_stats.contains(&String::from("default")));
         assert_eq!(2, tube_stats.len());
+    };
+
+    run_testing_code(beanstalk_client, testing_code).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn list_tube_used_test() {
+    let (beanstalk_client, beanstalk_proxy) = setup_client().await;
+
+    let testing_code = async {
+        let tube_name = in_new_testing_tube(&beanstalk_proxy).await;
+
+        let used_tube = beanstalk_proxy.list_tube_used().await.unwrap();
+        
+        assert_eq!(tube_name, used_tube);
     };
 
     run_testing_code(beanstalk_client, testing_code).await;

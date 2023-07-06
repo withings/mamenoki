@@ -476,6 +476,21 @@ impl BeanstalkProxy {
         self.list_tubes_by_command(String::from("list-tubes-watched")).await
     }
 
+    /// Get the tube currently being used by the client
+    pub async fn list_tube_used(&self) -> BeanstalkResult {
+        log::debug!("listing tube used");
+        let command = String::from("list-tube-used\r\n");
+        let using_result = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+
+        let result_parts: Vec<&str> = using_result.trim().split(" ").collect();
+
+        if result_parts.len() != 2 || result_parts[0] != "USING" {
+            return Err(BeanstalkError::UnexpectedResponse("list-tube-used".to_string(), using_result));
+        }
+
+        Ok(String::from(result_parts[1]))
+    }
+
     // private functions //////////////////////////////////////////////////////
 
     async fn peek_from_queue(&self, status: String) -> Result<Option<Job>, BeanstalkError> {
