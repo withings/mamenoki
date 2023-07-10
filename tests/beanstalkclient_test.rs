@@ -703,7 +703,8 @@ fn put_command_config_defaults_test() {
 // Helper functions ///////////////////////////////////////////////////////////
 
 async fn setup_client() -> (BeanstalkChannel, BeanstalkClient) {
-    let beanstalkd_addr = String::from("localhost:11300");
+    let beanstalkd_addr = std::env::var("BEANSTALKD_ADDR").unwrap_or(
+        String::from("localhost:11300"));
     let beanstalk_channel = BeanstalkChannel::connect(&beanstalkd_addr).await.unwrap();
 
     let beanstalk_client = beanstalk_channel.create_client();

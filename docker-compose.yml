@@ -2,9 +2,22 @@ version: '3'
 services:
 
   beanstalkd:
+    hostname: test-beanstalkd-server
     image: schickling/beanstalkd
     tty: true
     expose:
       - 11300
     ports:
       - 11300:11300
+
+  test-loop:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    tty: true
+    volumes:
+      - .:/home/beanstalkclient
+    depends_on:
+      - beanstalkd
+    environment:
+      - BEANSTALKD_ADDR=test-beanstalkd-server:11300

@@ -10,18 +10,20 @@ Build with :
     $ cargo build --release  # actual build
 
 
+## Tests
+
+You can run all the tests locally or in a CI environment with:
+
+    $ docker compose -f docker-compose-cicd.yml run all_tests
+
+You can continuously run all the tests during the development (they will be re-run at every change) with:
+
+    $ docker compose up
+
+
 ## Usage examples
 
 You can see an usage example of this library in `example/connection_and_request.rs`.
-You can run that code with
+You can run this code with
 
-    $ docker compose up
-    $ cargo run --example connection_and_request
-
-
-## Tests
-
-You can run the tests during the development with
-
-    $ docker compose up
-    $ cargo test
+    $ docker compose -f docker-compose-cicd.yml run usage_example

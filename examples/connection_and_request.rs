@@ -7,7 +7,6 @@
 //!     cargo run --example connection_and_request
 
 
-// use tokio::time;
 use core::time::Duration;
 use std::time::SystemTime;
 
@@ -28,7 +27,8 @@ pub async fn main() {
         }
     }
 
-    let beanstalkd_addr = String::from("localhost:11300");
+    let beanstalkd_addr = std::env::var("BEANSTALKD_ADDR").unwrap_or(
+        String::from("localhost:11300"));
 
     // Creating the connection to add jobs to the beanstalkd
     let mut bstk_writer = match BeanstalkChannel::connect(&beanstalkd_addr).await {
@@ -55,7 +55,8 @@ pub async fn main() {
     };
 
     let writer_client = bstk_writer.create_client();
-    let reader_client = bstk_reader.create_client();
+    let watch_client = bstk_reader.create_client();
+    let stats_client = bstk_reader.create_client();
 
     tokio::join!(
         bstk_reader.run_channel(),
@@ -86,11 +87,11 @@ pub async fn main() {
         },
         async {
             /* same for WATCH and the forwarder/worker */
-            match reader_client.watch_tube("example_connection_and_request").await {
+            match watch_client.watch_tube("example_connection_and_request").await {
                 Ok(_) => {
                     log::info!("reader ready for jobs!");
                     loop {
-                        let job = match reader_client.reserve().await {
+                        let job = match watch_client.reserve().await {
                             Ok(j) => j,
                             Err(BeanstalkError::ReservationTimeout) => continue,
                             Err(e) => {
@@ -102,7 +103,7 @@ pub async fn main() {
                 
                         /* Immediately delete the job, whatever happens next */
                         log::debug!("new job from beanstalkd: {}", job.payload);
-                        if let Err(e) = reader_client.delete(job.id).await {
+                        if let Err(e) = watch_client.delete(job.id).await {
                             log::error!("failed to delete job, will process anyway: {}", e);
                         }
                     }
@@ -116,7 +117,7 @@ pub async fn main() {
         async {
             // Get the stats from Beanstalkd and print them
             loop {
-                match reader_client.stats().await {
+                match stats_client.stats().await {
                     Ok(stats) => {
                         log::debug!("beanstalkd stats: jobs_ready: {}, jobs_reserved: {}, jobs_delayed: {}, total_jobs: {}, current_connections: {}", 
                             stats.jobs_ready, stats.jobs_reserved, stats.jobs_delayed, stats.total_jobs, stats.current_connections);
