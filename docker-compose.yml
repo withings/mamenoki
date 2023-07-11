@@ -3,7 +3,7 @@ services:
 
   beanstalkd:
     hostname: test-beanstalkd-server
-    image: schickling/beanstalkd
+    image: ghcr.io/beanstalkd/beanstalkd:latest
     tty: true
     expose:
       - 11300
