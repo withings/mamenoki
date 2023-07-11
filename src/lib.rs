@@ -19,7 +19,6 @@ pub const DEFAULT_PRIORITY: u32 = 1025;
 
 pub const PUT_DEFAULT_DELAY: u32 = 0;
 pub const DEFAULT_TIME_TO_RUN: u32 = 60;
-pub const RESERVE_DEFAULT_TIMEOUT: u32 = 60;
 
 /// An handle to the beanstalkd TCP stream and the Tokio mpsc channels
 #[derive(Debug)]
