@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile.dev
     tty: true
     volumes:
-      - .:/home/beanstalkclient
+      - .:/home/mamenoki
     depends_on:
       - beanstalkd
     environment:

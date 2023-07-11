@@ -3,7 +3,7 @@ services:
 
   beanstalkd:
     hostname: test-beanstalkd-server
-    image: schickling/beanstalkd
+    image: ghcr.io/beanstalkd/beanstalkd:latest
     tty: true
     expose:
       - 11300
@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile.dev
     tty: true
     volumes:
-      - .:/home/beanstalkclient
+      - .:/home/mamenoki
     depends_on:
       - beanstalkd
     environment:
@@ -29,7 +29,7 @@ services:
       dockerfile: Dockerfile.dev
     tty: true
     volumes:
-      - .:/home/beanstalkclient
+      - .:/home/mamenoki
     depends_on:
       - beanstalkd
     environment:

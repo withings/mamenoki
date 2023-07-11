@@ -1,5 +1,5 @@
-use beanstalkclient::*;
 use fastrand;
+use mamenoki::*;
 use regex::Regex;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -55,7 +55,7 @@ async fn ignore_tube_failure_case_test() {
         // At least a watched tube is required by beanstalkd
         match beanstalk_client.ignore_tube("default").await {
             Ok(_) => panic!("It wasn't expected to succeed"),
-            Err(beanstalkclient::BeanstalkError::UnexpectedResponse(command, response)) => {
+            Err(BeanstalkError::UnexpectedResponse(command, response)) => {
                 assert_eq!("ignore", command);
                 assert_eq!("NOT_IGNORED\r\n", response);
             }
@@ -163,7 +163,7 @@ async fn reserve_with_timeout_error_case_test() {
 
         match beanstalk_client.reserve_with_timeout(0).await {
             Ok(_) => panic!("It wasn't expected to succeed"),
-            Err(beanstalkclient::BeanstalkError::ReservationTimeout) => {}
+            Err(BeanstalkError::ReservationTimeout) => {}
             Err(_) => panic!("It was expected to fail only with a ReservationTimeout"),
         }
     };
@@ -213,7 +213,7 @@ async fn release_with_config_failure_case_test() {
         match beanstalk_client.release_with_config(job_id, release_conf).await {
             Ok(_) => panic!("release wasn't expected to return an Ok result"),
             Err(e) => match e {
-                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                BeanstalkError::UnexpectedResponse(command, response) => {
                     assert_eq!("release", command);
                     assert_eq!("NOT_FOUND\r\n", response);
                 },
@@ -304,9 +304,9 @@ async fn stats_job_test() {
         assert_eq!(job_id, job_stats.id);
         assert_eq!(tube_name, job_stats.tube);
         assert_eq!("ready", job_stats.state);
-        assert_eq!(beanstalkclient::DEFAULT_PRIORITY, job_stats.priority);
-        assert_eq!(beanstalkclient::PUT_DEFAULT_DELAY, job_stats.delay);
-        assert_eq!(beanstalkclient::DEFAULT_TIME_TO_RUN, job_stats.time_to_run);
+        assert_eq!(DEFAULT_PRIORITY, job_stats.priority);
+        assert_eq!(PUT_DEFAULT_DELAY, job_stats.delay);
+        assert_eq!(DEFAULT_TIME_TO_RUN, job_stats.time_to_run);
         assert_eq!(0, job_stats.time_left);
         assert_eq!(0, job_stats.file);
         assert_eq!(0, job_stats.reserves);
@@ -357,7 +357,7 @@ async fn stats_tube_failure_case_test() {
         match beanstalk_client.stats_tube(&random_testing_tube_name()).await {
             Ok(_) => panic!("stats_tube wasn't expected to return an Ok result"),
             Err(e) => match e {
-                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                BeanstalkError::UnexpectedResponse(command, response) => {
                     assert_eq!("stats-tube", command);
                     assert_eq!("NOT_FOUND\r\n", response);
                 },
@@ -450,7 +450,7 @@ async fn bury_failure_case_test() {
         match beanstalk_client.bury(789789789).await {
             Ok(_) => panic!("bury wasn't expected to return an Ok value"),
             Err(e) => match e {
-                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                BeanstalkError::UnexpectedResponse(command, response) => {
                     assert_eq!("bury", command);
                     assert_eq!("NOT_FOUND\r\n", response);
                 },
@@ -492,7 +492,7 @@ async fn touch_failure_case_test() {
         match beanstalk_client.touch(123123123123).await {
             Ok(_) => panic!("touch wasn't expected to return an Ok value"),
             Err(e) => match e {
-                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                BeanstalkError::UnexpectedResponse(command, response) => {
                     assert_eq!("touch", command);
                     assert_eq!("NOT_FOUND\r\n", response);
                 },
@@ -535,7 +535,7 @@ async fn peek_failure_case_test() {
         match beanstalk_client.peek(456456456456).await {
             Ok(_) => panic!("peek wasn't expected to return an Ok value"),
             Err(e) => match e {
-                beanstalkclient::BeanstalkError::UnexpectedResponse(command, response) => {
+                BeanstalkError::UnexpectedResponse(command, response) => {
                     assert_eq!("peek", command);
                     assert_eq!("NOT_FOUND\r\n", response);
                 },
@@ -728,7 +728,7 @@ async fn pause_tube_test() {
 
         match beanstalk_client.reserve_with_timeout(0).await {
             Ok(_) => panic!("reserve was expected to fail because all the jobs were delayed by the pause command"),
-            Err(beanstalkclient::BeanstalkError::ReservationTimeout) => { },
+            Err(BeanstalkError::ReservationTimeout) => { },
             Err(_) => panic!("It was expected to fail only with a ReservationTimeout")
         }
     };
@@ -753,7 +753,7 @@ async fn pause_tube_failure_case_test() {
             .await
         {
             Ok(_) => panic!("pause_tube was expected to fail because the tube does not exist"),
-            Err(beanstalkclient::BeanstalkError::UnexpectedResponse(command, response)) => {
+            Err(BeanstalkError::UnexpectedResponse(command, response)) => {
                 assert_eq!("pause-tube", command);
                 assert_eq!("NOT_FOUND\r\n", response);
             }

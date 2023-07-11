@@ -1,6 +1,6 @@
 //! connection_and_request example.
 //!
-//! This is a usage example of the beanstalkclient library
+//! This is a usage example of the mamenoki library
 //!
 //! Run in a terminal:
 //!
@@ -9,7 +9,7 @@
 use core::time::Duration;
 use std::time::SystemTime;
 
-use beanstalkclient::{BeanstalkChannel, BeanstalkError};
+use mamenoki::{BeanstalkChannel, BeanstalkError};
 use tracing_subscriber;
 
 const PRODUCER_WAIT_TIME_MILLISEC: u64 = 3500;
