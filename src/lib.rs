@@ -176,12 +176,9 @@ pub struct ReleaseCommandConfig {
     pub delay: u32 
 }
 
-impl ReleaseCommandConfig {
-    pub fn new(priority: Option<u32>, delay: Option<u32>) -> Self {
-        Self {
-            priority: priority.unwrap_or(DEFAULT_PRIORITY),
-            delay: delay.unwrap_or(PUT_DEFAULT_DELAY)
-        }
+impl Default for ReleaseCommandConfig {
+    fn default() -> Self {
+        Self { priority: DEFAULT_PRIORITY, delay: PUT_DEFAULT_DELAY }
     }
 }
 
@@ -395,7 +392,7 @@ impl BeanstalkClient {
 
     /// Release a job that was previously reserved
     pub async fn release(&self, job_id: JobId) -> BeanstalkResult {
-        self.release_with_config(job_id, ReleaseCommandConfig::new(None, None)).await
+        self.release_with_config(job_id, ReleaseCommandConfig::default()).await
     }
 
     /// Release a job that was previously reserved with a custom configuration

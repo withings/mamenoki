@@ -166,7 +166,7 @@ async fn release_with_config_test() {
         beanstalk_client.put(String::from("message")).await.unwrap();
         let job = beanstalk_client.reserve().await.unwrap();
         
-        let release_conf = ReleaseCommandConfig::new(Some(10), Some(120));
+        let release_conf = ReleaseCommandConfig { delay: 120, ..ReleaseCommandConfig::default() };
         let res = beanstalk_client.release_with_config(job.id, release_conf).await.unwrap();
 
         assert_eq!("RELEASED\r\n", res);
@@ -188,7 +188,7 @@ async fn release_with_config_failure_case_test() {
         let put_result = beanstalk_client.put(String::from("message")).await.unwrap();
         let job_id = job_id_from_put_result(&put_result);
         
-        let release_conf = ReleaseCommandConfig::new(None, None);
+        let release_conf = ReleaseCommandConfig::default();
         match beanstalk_client.release_with_config(job_id, release_conf).await {
             Ok(_) => panic!("release wasn't expected to return an Ok result"),
             Err(e) => match e {
