@@ -22,6 +22,7 @@ pub const DEFAULT_TIME_TO_RUN: u32 = 60;
 pub const RESERVE_DEFAULT_TIMEOUT: u32 = 60;
 
 /// An handle to the beanstalkd TCP stream and the Tokio mpsc channels
+#[derive(Debug)]
 pub struct BeanstalkChannel {
     /// TCP stream to beanstalkd
     stream: TcpStream,
@@ -48,7 +49,7 @@ pub enum BeanstalkError {
 
 /// Convenience struct: copy of the channel's transmitting end,
 /// with all the methods which allow to send the commands to a beanstalkd server. 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BeanstalkClient {
     request_tx: mpsc::Sender<ClientMessage>
 }
@@ -150,12 +151,14 @@ impl BeanstalkChannel {
 pub type JobId = u64;
 
 /// A beanstalk job
+#[derive(Debug)]
 pub struct Job {
     pub id: JobId,
     pub payload: String
 }
 
-/// Configuration to customize the insertion of a new task with the `put` command 
+/// Configuration to customize the insertion of a new task with the `put` command
+#[derive(Debug)]
 pub struct PutCommandConfig {
     pub priority: u32,
     pub delay: u32,
@@ -171,6 +174,7 @@ impl Default for PutCommandConfig {
 }
 
 /// Configuration to customize the release of a task with the `release` command
+#[derive(Debug)]
 pub struct ReleaseCommandConfig {
     pub priority: u32,
     pub delay: u32 
@@ -183,7 +187,7 @@ impl Default for ReleaseCommandConfig {
 }
 
 /// beanstalkd statistics
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Statistics {
     #[serde(rename = "current-jobs-urgent")]
     pub jobs_urgent: u64,
@@ -288,7 +292,7 @@ pub struct Statistics {
 }
 
 /// job statistics
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct JobStatistics {
     pub id: JobId,
     pub tube: String,
@@ -310,7 +314,7 @@ pub struct JobStatistics {
 }
 
 /// Tube statistics
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TubeStatistics {
     pub name: String,
     #[serde(rename = "current-jobs-urgent")]
