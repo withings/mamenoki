@@ -1,15 +1,15 @@
+use log;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_yaml;
+use thiserror::Error;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::net::TcpStream;
-use tokio::io::AsyncWriteExt;
-use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use serde_yaml;
-use serde::de::DeserializeOwned;
-use log;
 
 /// Queue size limit for messages to a Beanstalk channel
 const BEANSTALK_MESSAGE_QUEUE_SIZE: usize = 128;
@@ -47,10 +47,10 @@ pub enum BeanstalkError {
 }
 
 /// Convenience struct: copy of the channel's transmitting end,
-/// with all the methods which allow to send the commands to a beanstalkd server. 
+/// with all the methods which allow to send the commands to a beanstalkd server.
 #[derive(Clone, Debug)]
 pub struct BeanstalkClient {
-    request_tx: mpsc::Sender<ClientMessage>
+    request_tx: mpsc::Sender<ClientMessage>,
 }
 
 /// Convenience type: Beanstalk operation result
@@ -82,7 +82,9 @@ impl BeanstalkChannel {
 
     /// Provides a clone of the channel's tx, for use by any task
     pub fn create_client(&self) -> BeanstalkClient {
-        BeanstalkClient { request_tx: self.tx.clone() }
+        BeanstalkClient {
+            request_tx: self.tx.clone(),
+        }
     }
 
     /// The channel which owns the actual connection and processes messages
@@ -97,20 +99,32 @@ impl BeanstalkChannel {
         while let Some(message) = self.rx.recv().await {
             /* Send the command to beanstalk and get the first response line */
             let mut response = String::new();
-            let response_status = write.write_all(message.body.command.as_bytes()).await
+            let response_status = write
+                .write_all(message.body.command.as_bytes())
+                .await
                 .and(bufreader.read_line(&mut response).await);
 
             /* Make sure we actually got a response, otherwise tell the other task it failed */
             if let Err(e) = response_status {
-                message.return_tx.send(Err(BeanstalkError::CommunicationError(e.to_string()))).ok();
+                message
+                    .return_tx
+                    .send(Err(BeanstalkError::CommunicationError(e.to_string())))
+                    .ok();
                 continue;
             }
 
             /* Figure out if we need to read more: the task is expecting a prefix AND that's what we get */
             let mut response_parts = response.trim().split(" ");
-            let expect_more_content = message.body.more_condition
-                .map(|expected_prefix| response_parts.next().map(|prefix_received| expected_prefix == prefix_received))
-                .flatten().unwrap_or(false); /* default to false on Nones: no prefix or no first "part" in the response */
+            let expect_more_content = message
+                .body
+                .more_condition
+                .map(|expected_prefix| {
+                    response_parts
+                        .next()
+                        .map(|prefix_received| expected_prefix == prefix_received)
+                })
+                .flatten()
+                .unwrap_or(false); /* default to false on Nones: no prefix or no first "part" in the response */
 
             /* No more content, reply with the first line alone and move on */
             if !expect_more_content {
@@ -120,14 +134,21 @@ impl BeanstalkChannel {
 
             /* Alright, more content: try to figure out how many bytes we need to read
              * That's the last item in the first response line above */
-            let extra_payload_length = response_parts.last()
+            let extra_payload_length = response_parts
+                .last()
                 .map(|bytes_str| bytes_str.parse::<usize>().ok())
                 .flatten();
             let extra_payload_length = match extra_payload_length {
                 Some(length) => length,
                 None => {
                     /* Either there was no "last" item or it wasn't an int */
-                    message.return_tx.send(Err(BeanstalkError::UnexpectedResponse("reserve".to_string(), response.clone()))).ok();
+                    message
+                        .return_tx
+                        .send(Err(BeanstalkError::UnexpectedResponse(
+                            "reserve".to_string(),
+                            response.clone(),
+                        )))
+                        .ok();
                     continue;
                 }
             };
@@ -153,7 +174,7 @@ pub type JobId = u64;
 #[derive(Debug)]
 pub struct Job {
     pub id: JobId,
-    pub payload: String
+    pub payload: String,
 }
 
 /// Configuration to customize the insertion of a new task with the `put` command
@@ -161,14 +182,16 @@ pub struct Job {
 pub struct PutCommandConfig {
     pub priority: u32,
     pub delay: u32,
-    pub time_to_run: u32
+    pub time_to_run: u32,
 }
 
 impl Default for PutCommandConfig {
     fn default() -> Self {
-        Self { priority: DEFAULT_PRIORITY,
+        Self {
+            priority: DEFAULT_PRIORITY,
             delay: PUT_DEFAULT_DELAY,
-            time_to_run: DEFAULT_TIME_TO_RUN }
+            time_to_run: DEFAULT_TIME_TO_RUN,
+        }
     }
 }
 
@@ -176,12 +199,15 @@ impl Default for PutCommandConfig {
 #[derive(Debug)]
 pub struct ReleaseCommandConfig {
     pub priority: u32,
-    pub delay: u32 
+    pub delay: u32,
 }
 
 impl Default for ReleaseCommandConfig {
     fn default() -> Self {
-        Self { priority: DEFAULT_PRIORITY, delay: PUT_DEFAULT_DELAY }
+        Self {
+            priority: DEFAULT_PRIORITY,
+            delay: PUT_DEFAULT_DELAY,
+        }
     }
 }
 
@@ -309,7 +335,7 @@ pub struct JobStatistics {
     pub timeouts: u32,
     pub releases: u32,
     pub buries: u32,
-    pub kicks: u32
+    pub kicks: u32,
 }
 
 /// Tube statistics
@@ -340,40 +366,61 @@ pub struct TubeStatistics {
     #[serde(rename = "cmd-pause-tube")]
     pub cmd_pause_tube: u64,
     #[serde(rename = "pause-time-left")]
-    pub pause_time_left: u32
+    pub pause_time_left: u32,
 }
 
 impl BeanstalkClient {
     /// Ask beanstalk to USE a tube on this connection
     pub async fn use_tube(&self, tube: &str) -> BeanstalkResult {
         log::debug!("using tube {}", tube);
-        let using = self.exchange(ClientMessageBody { command: format!("use {}\r\n", tube), more_condition: None }).await?;
+        let using = self
+            .exchange(ClientMessageBody {
+                command: format!("use {}\r\n", tube),
+                more_condition: None,
+            })
+            .await?;
         match using.starts_with("USING ") {
             true => Ok(using),
-            false => Err(BeanstalkError::UnexpectedResponse("use".to_string(), using))
+            false => Err(BeanstalkError::UnexpectedResponse("use".to_string(), using)),
         }
     }
 
     /// Ask beanstalk to WATCH a tube on this connection
     pub async fn watch_tube(&self, tube: &str) -> BeanstalkResult {
         log::debug!("watching tube {}", tube);
-        let watching = self.exchange(ClientMessageBody { command: format!("watch {}\r\n", tube), more_condition: None }).await?;
+        let watching = self
+            .exchange(ClientMessageBody {
+                command: format!("watch {}\r\n", tube),
+                more_condition: None,
+            })
+            .await?;
         match watching.starts_with("WATCHING ") {
             true => Ok(watching),
-            false => Err(BeanstalkError::UnexpectedResponse("watch".to_string(), watching))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "watch".to_string(),
+                watching,
+            )),
         }
     }
 
     /// Ask beanstalk to IGNORE a tube on this connection.
-    /// 
+    ///
     /// It will return an error in case the tube was not watched.
     pub async fn ignore_tube(&self, tube: &str) -> BeanstalkResult {
         log::debug!("ignoring tube {}", tube);
         let command = format!("ignore {}\r\n", tube);
-        let ignore_result = self.exchange(ClientMessageBody { command: command, more_condition: None }).await?;
+        let ignore_result = self
+            .exchange(ClientMessageBody {
+                command: command,
+                more_condition: None,
+            })
+            .await?;
         match ignore_result.starts_with("WATCHING ") {
             true => Ok(ignore_result),
-            false => Err(BeanstalkError::UnexpectedResponse("ignore".to_string(), ignore_result))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "ignore".to_string(),
+                ignore_result,
+            )),
         }
     }
 
@@ -385,34 +432,65 @@ impl BeanstalkClient {
     /// Put a job into the queue with a custom configuration
     pub async fn put_with_config(&self, job: String, config: PutCommandConfig) -> BeanstalkResult {
         log::debug!("putting beanstalkd job, {} byte(s)", job.len());
-        let command = format!("put {} {} {} {}\r\n{}\r\n", config.priority, config.delay, config.time_to_run, job.len(), job);
-        let inserted = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let command = format!(
+            "put {} {} {} {}\r\n{}\r\n",
+            config.priority,
+            config.delay,
+            config.time_to_run,
+            job.len(),
+            job
+        );
+        let inserted = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
         match inserted.starts_with("INSERTED ") {
             true => Ok(inserted),
-            false => Err(BeanstalkError::UnexpectedResponse("put".to_string(), inserted))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "put".to_string(),
+                inserted,
+            )),
         }
     }
 
     /// Release a job that was previously reserved
     pub async fn release(&self, job_id: JobId) -> BeanstalkResult {
-        self.release_with_config(job_id, ReleaseCommandConfig::default()).await
+        self.release_with_config(job_id, ReleaseCommandConfig::default())
+            .await
     }
 
     /// Release a job that was previously reserved with a custom configuration
-    pub async fn release_with_config(&self, job_id: JobId, config: ReleaseCommandConfig) -> BeanstalkResult {
+    pub async fn release_with_config(
+        &self,
+        job_id: JobId,
+        config: ReleaseCommandConfig,
+    ) -> BeanstalkResult {
         log::debug!("releasing beanstalkd job {}", job_id);
-        let command = format!("release {} {} {}\r\n", job_id, config.priority, config.delay);
-        let release_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let command = format!(
+            "release {} {} {}\r\n",
+            job_id, config.priority, config.delay
+        );
+        let release_response = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
         match release_response.starts_with("RELEASED") {
             true => Ok(release_response),
-            false => Err(BeanstalkError::UnexpectedResponse("release".to_string(), release_response))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "release".to_string(),
+                release_response,
+            )),
         }
     }
 
     /// Reserve a job from the queue without any timeout.
     pub async fn reserve(&self) -> Result<Job, BeanstalkError> {
         let command_name = String::from("reserve");
-        let command = format!("{}\r\n",command_name);
+        let command = format!("{}\r\n", command_name);
 
         self.reserve_by_command(command, command_name).await
     }
@@ -428,15 +506,25 @@ impl BeanstalkClient {
     /// Peek a job by id
     pub async fn peek(&self, job_id: JobId) -> Result<Job, BeanstalkError> {
         let command = format!("peek {}\r\n", job_id);
-        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("FOUND".to_string()) }).await?;
+        let command_response = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: Some("FOUND".to_string()),
+            })
+            .await?;
         let mut lines = command_response.trim().split("\r\n");
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse("peek".to_string(), "<empty response>".to_string()))?;
+        let first_line = lines.next().ok_or(BeanstalkError::UnexpectedResponse(
+            "peek".to_string(),
+            "<empty response>".to_string(),
+        ))?;
         let parts: Vec<&str> = first_line.trim().split(" ").collect();
 
         if parts.len() != 3 || parts[0] != "FOUND" {
-            return Err(BeanstalkError::UnexpectedResponse("peek".to_string(), command_response));
+            return Err(BeanstalkError::UnexpectedResponse(
+                "peek".to_string(),
+                command_response,
+            ));
         }
 
         Ok(Job {
@@ -463,10 +551,18 @@ impl BeanstalkClient {
     /// Delete a job from the queue
     pub async fn delete(&self, id: JobId) -> BeanstalkResult {
         log::debug!("deleting job ID {}", id);
-        let deleted = self.exchange(ClientMessageBody { command: format!("delete {}\r\n", id), more_condition: None }).await?;
+        let deleted = self
+            .exchange(ClientMessageBody {
+                command: format!("delete {}\r\n", id),
+                more_condition: None,
+            })
+            .await?;
         match deleted.starts_with("DELETED") {
             true => Ok(deleted),
-            false => Err(BeanstalkError::UnexpectedResponse("delete".to_string(), deleted))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "delete".to_string(),
+                deleted,
+            )),
         }
     }
 
@@ -474,10 +570,18 @@ impl BeanstalkClient {
     pub async fn kick_job(&self, id: JobId) -> BeanstalkResult {
         log::debug!("kicking job ID {}", id);
         let command = format!("kick-job {}\r\n", id);
-        let kick_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let kick_response = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
         match kick_response.starts_with("KICKED") {
             true => Ok(kick_response),
-            false => Err(BeanstalkError::UnexpectedResponse("kick-job".to_string(), kick_response))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "kick-job".to_string(),
+                kick_response,
+            )),
         }
     }
 
@@ -485,10 +589,18 @@ impl BeanstalkClient {
     pub async fn kick(&self, bound: u64) -> BeanstalkResult {
         log::debug!("kicking {} jobs", bound);
         let command = format!("kick {}\r\n", bound);
-        let kick_response = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let kick_response = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
         match kick_response.starts_with("KICKED") {
             true => Ok(kick_response),
-            false => Err(BeanstalkError::UnexpectedResponse("kick".to_string(), kick_response))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "kick".to_string(),
+                kick_response,
+            )),
         }
     }
 
@@ -517,10 +629,18 @@ impl BeanstalkClient {
     pub async fn bury(&self, id: JobId) -> BeanstalkResult {
         log::debug!("burying job ID {}", id);
         let command = format!("bury {} {}\r\n", id, DEFAULT_PRIORITY);
-        let buried = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let buried = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
         match buried.starts_with("BURIED") {
             true => Ok(buried),
-            false => Err(BeanstalkError::UnexpectedResponse("bury".to_string(), buried))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "bury".to_string(),
+                buried,
+            )),
         }
     }
 
@@ -528,10 +648,18 @@ impl BeanstalkClient {
     pub async fn touch(&self, id: JobId) -> BeanstalkResult {
         log::debug!("touching job ID {}", id);
         let command = format!("touch {}\r\n", id);
-        let touched = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let touched = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
         match touched.starts_with("TOUCHED") {
             true => Ok(touched),
-            false => Err(BeanstalkError::UnexpectedResponse("touch".to_string(), touched))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "touch".to_string(),
+                touched,
+            )),
         }
     }
 
@@ -542,19 +670,28 @@ impl BeanstalkClient {
 
     /// Get the list of tubes currently being watched by the client
     pub async fn list_tubes_watched(&self) -> Result<Vec<String>, BeanstalkError> {
-        self.list_tubes_by_command(String::from("list-tubes-watched")).await
+        self.list_tubes_by_command(String::from("list-tubes-watched"))
+            .await
     }
 
     /// Get the tube currently being used by the client
     pub async fn list_tube_used(&self) -> BeanstalkResult {
         log::debug!("listing tube used");
         let command = String::from("list-tube-used\r\n");
-        let using_result = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let using_result = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
 
         let result_parts: Vec<&str> = using_result.trim().split(" ").collect();
 
         if result_parts.len() != 2 || result_parts[0] != "USING" {
-            return Err(BeanstalkError::UnexpectedResponse("list-tube-used".to_string(), using_result));
+            return Err(BeanstalkError::UnexpectedResponse(
+                "list-tube-used".to_string(),
+                using_result,
+            ));
         }
 
         Ok(String::from(result_parts[1]))
@@ -564,11 +701,19 @@ impl BeanstalkClient {
     pub async fn pause_tube(&self, tube: &str, delay: u32) -> BeanstalkResult {
         log::debug!("pausing tube");
         let command = format!("pause-tube {} {}\r\n", tube, delay);
-        let pause_result = self.exchange(ClientMessageBody { command, more_condition: None }).await?;
+        let pause_result = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: None,
+            })
+            .await?;
 
         match pause_result.starts_with("PAUSED") {
             true => Ok(pause_result),
-            false => Err(BeanstalkError::UnexpectedResponse("pause-tube".to_string(), pause_result))
+            false => Err(BeanstalkError::UnexpectedResponse(
+                "pause-tube".to_string(),
+                pause_result,
+            )),
         }
     }
 
@@ -577,71 +722,115 @@ impl BeanstalkClient {
     /// Low level channel exchange: send a message body over the channel and wait for a reply
     async fn exchange(&self, body: ClientMessageBody) -> BeanstalkResult {
         let (tx, rx) = oneshot::channel::<BeanstalkResult>();
-        self.request_tx.send(ClientMessage { return_tx: tx, body }).await
+        self.request_tx
+            .send(ClientMessage {
+                return_tx: tx,
+                body,
+            })
+            .await
             .map_err(|e| BeanstalkError::QueueUnavailable(e.to_string()))?;
-        rx.await.map_err(|e| BeanstalkError::ReturnChannelFailure(e.to_string()))?
+        rx.await
+            .map_err(|e| BeanstalkError::ReturnChannelFailure(e.to_string()))?
     }
 
     /// Peek a job from a status queue (ready, delayed and buried queue)
     async fn peek_from_queue(&self, status: String) -> Result<Option<Job>, BeanstalkError> {
         let command_name = format!("peek-{}", status);
-        let command_response = self.exchange(ClientMessageBody { command: format!("{}\r\n", command_name), more_condition: Some("FOUND".to_string()) }).await?;
+        let command_response = self
+            .exchange(ClientMessageBody {
+                command: format!("{}\r\n", command_name),
+                more_condition: Some("FOUND".to_string()),
+            })
+            .await?;
         let mut lines = command_response.trim().split("\r\n");
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse(command_name.clone(), "<empty response>".to_string()))?;
+        let first_line = lines.next().ok_or(BeanstalkError::UnexpectedResponse(
+            command_name.clone(),
+            "<empty response>".to_string(),
+        ))?;
         let parts: Vec<&str> = first_line.trim().split(" ").collect();
 
-        match parts[0]  {
+        match parts[0] {
             "FOUND" => {
                 if parts.len() != 3 {
-                    return Err(BeanstalkError::UnexpectedResponse(command_name.clone(), command_response));
+                    return Err(BeanstalkError::UnexpectedResponse(
+                        command_name.clone(),
+                        command_response,
+                    ));
                 }
-        
-                let id = parts[1].parse::<JobId>()
-                    .map_err(|_| BeanstalkError::UnexpectedResponse(command_name, command_response.clone()))?;
-        
+
+                let id = parts[1].parse::<JobId>().map_err(|_| {
+                    BeanstalkError::UnexpectedResponse(command_name, command_response.clone())
+                })?;
+
                 Ok(Some(Job {
                     id: id,
                     payload: lines.collect::<Vec<&str>>().join("\r\n"),
                 }))
-            },
+            }
             "NOT_FOUND" => Ok(None),
-            _ => Err(BeanstalkError::UnexpectedResponse("peek".to_string(), command_response))
+            _ => Err(BeanstalkError::UnexpectedResponse(
+                "peek".to_string(),
+                command_response,
+            )),
         }
     }
 
     /// Get the list of tubes using different commands, as `list-tubes` or `list-tubes-watched`
     async fn list_tubes_by_command(&self, command: String) -> Result<Vec<String>, BeanstalkError> {
         log::debug!("listing tubes with {}", command);
-        let message = ClientMessageBody { command: format!("{}\r\n", command), more_condition: Some("OK".to_string()) };
+        let message = ClientMessageBody {
+            command: format!("{}\r\n", command),
+            more_condition: Some("OK".to_string()),
+        };
         let list_result = self.exchange(message).await?;
         let mut lines = list_result.trim().split("\r\n");
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse(command.clone(), "<empty response>".to_string()))?;
+        let first_line = lines.next().ok_or(BeanstalkError::UnexpectedResponse(
+            command.clone(),
+            "<empty response>".to_string(),
+        ))?;
         let parts: Vec<&str> = first_line.trim().split(" ").collect();
 
         if parts.len() != 2 || parts[0] != "OK" {
-            return Err(BeanstalkError::UnexpectedResponse(command.clone(), list_result));
+            return Err(BeanstalkError::UnexpectedResponse(
+                command.clone(),
+                list_result,
+            ));
         }
         serde_yaml::from_str(&lines.collect::<Vec<&str>>().join("\r\n"))
             .map_err(|e| BeanstalkError::UnexpectedResponse(command, e.to_string()))
     }
 
     /// Get the stats using different commands, as `stats` or `stats-job` or `stats-tube`
-    async fn stats_by_command<T>(&self, command: String, command_name: String) -> Result<T, BeanstalkError> 
-            where T: DeserializeOwned {
-        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("OK".to_string()) }).await?;
+    async fn stats_by_command<T>(
+        &self,
+        command: String,
+        command_name: String,
+    ) -> Result<T, BeanstalkError>
+    where
+        T: DeserializeOwned,
+    {
+        let command_response = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: Some("OK".to_string()),
+            })
+            .await?;
 
         let mut lines = command_response.trim().split("\r\n");
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse(command_name.clone(), "empty response".to_string()))?;
+        let first_line = lines.next().ok_or(BeanstalkError::UnexpectedResponse(
+            command_name.clone(),
+            "empty response".to_string(),
+        ))?;
         let parts: Vec<&str> = first_line.trim().split(" ").collect();
 
         if parts.len() != 2 || parts[0] != "OK" {
-            return Err(BeanstalkError::UnexpectedResponse(command_name, command_response));
+            return Err(BeanstalkError::UnexpectedResponse(
+                command_name,
+                command_response,
+            ));
         }
 
         let stats_yaml = lines.collect::<Vec<&str>>().join("\r\n");
@@ -649,12 +838,23 @@ impl BeanstalkClient {
             .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
     }
 
-    async fn reserve_by_command(&self, command: String, command_name: String) -> Result<Job, BeanstalkError> {
-        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("RESERVED".to_string()) }).await?;
+    async fn reserve_by_command(
+        &self,
+        command: String,
+        command_name: String,
+    ) -> Result<Job, BeanstalkError> {
+        let command_response = self
+            .exchange(ClientMessageBody {
+                command,
+                more_condition: Some("RESERVED".to_string()),
+            })
+            .await?;
         let mut lines = command_response.trim().split("\r\n");
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse(command_name.clone(), "empty response".to_string()))?;
+        let first_line = lines.next().ok_or(BeanstalkError::UnexpectedResponse(
+            command_name.clone(),
+            "empty response".to_string(),
+        ))?;
         let parts: Vec<&str> = first_line.trim().split(" ").collect();
 
         if parts.len() == 1 && parts[0] == "TIMED_OUT" {
@@ -662,11 +862,15 @@ impl BeanstalkClient {
         }
 
         if parts.len() != 3 || parts[0] != "RESERVED" {
-            return Err(BeanstalkError::UnexpectedResponse(command_name.clone(), command_response));
+            return Err(BeanstalkError::UnexpectedResponse(
+                command_name.clone(),
+                command_response,
+            ));
         }
 
-        let id = parts[1].parse::<JobId>()
-            .map_err(|_| BeanstalkError::UnexpectedResponse(command_name.clone(), command_response.clone()))?;
+        let id = parts[1].parse::<JobId>().map_err(|_| {
+            BeanstalkError::UnexpectedResponse(command_name.clone(), command_response.clone())
+        })?;
 
         Ok(Job {
             id,

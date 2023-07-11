@@ -1,7 +1,6 @@
 use beanstalkclient::*;
-use regex::Regex;
 use fastrand;
-
+use regex::Regex;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn use_tube_test() {
@@ -12,7 +11,7 @@ async fn use_tube_test() {
         let result = beanstalk_client.use_tube(&tube_name).await.unwrap();
         assert_eq!(format!("USING {}\r\n", tube_name), result);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -26,7 +25,7 @@ async fn watch_tube_test() {
         let regex = Regex::new(r"WATCHING \d+\r\n").unwrap();
         assert!(regex.is_match(&result));
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -36,7 +35,7 @@ async fn ignore_tube_test() {
 
     let testing_code = async {
         let tube_name = random_testing_tube_name();
-        
+
         let result = beanstalk_client.watch_tube(&tube_name).await.unwrap();
         // The watched tubes are "default" and `tube_name`
         assert_eq!("WATCHING 2\r\n", result);
@@ -44,7 +43,7 @@ async fn ignore_tube_test() {
         let result = beanstalk_client.ignore_tube(&tube_name).await.unwrap();
         assert_eq!("WATCHING 1\r\n", result);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -59,11 +58,11 @@ async fn ignore_tube_failure_case_test() {
             Err(beanstalkclient::BeanstalkError::UnexpectedResponse(command, response)) => {
                 assert_eq!("ignore", command);
                 assert_eq!("NOT_IGNORED\r\n", response);
-            },
-            Err(_) => panic!("It was expected to fail only with a ReservationTimeout")
+            }
+            Err(_) => panic!("It was expected to fail only with a ReservationTimeout"),
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -74,13 +73,16 @@ async fn put_test() {
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
 
-        let result = beanstalk_client.put(String::from("job-web-event")).await.unwrap();
-    
+        let result = beanstalk_client
+            .put(String::from("job-web-event"))
+            .await
+            .unwrap();
+
         // expect that containing INSERTED followed by the id of the created job
         let regex = Regex::new(r"INSERTED \d+\r\n").unwrap();
         assert!(regex.is_match(&result));
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -94,16 +96,23 @@ async fn put_with_config_test() {
         let priority = 50;
         let delay = 3600;
         let time_to_run = 300;
-        let config = PutCommandConfig { priority, delay, time_to_run };
-        let result = beanstalk_client.put_with_config(String::from("job-web-event"), config).await.unwrap();
-    
+        let config = PutCommandConfig {
+            priority,
+            delay,
+            time_to_run,
+        };
+        let result = beanstalk_client
+            .put_with_config(String::from("job-web-event"), config)
+            .await
+            .unwrap();
+
         let job_id = job_id_from_put_result(&result);
         let job_stats = beanstalk_client.stats_job(job_id).await.unwrap();
         assert_eq!(priority, job_stats.priority);
         assert_eq!(delay, job_stats.delay);
         assert_eq!(time_to_run, job_stats.time_to_run);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -114,12 +123,15 @@ async fn reserve_test() {
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
 
-        beanstalk_client.put(String::from("job-web-event-42")).await.unwrap();
+        beanstalk_client
+            .put(String::from("job-web-event-42"))
+            .await
+            .unwrap();
         let job = beanstalk_client.reserve().await.unwrap();
 
         assert_eq!("job-web-event-42", job.payload);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -130,12 +142,15 @@ async fn reserve_with_timeout_test() {
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
 
-        beanstalk_client.put(String::from("job-info")).await.unwrap();
+        beanstalk_client
+            .put(String::from("job-info"))
+            .await
+            .unwrap();
         let job = beanstalk_client.reserve_with_timeout(1).await.unwrap();
-       
+
         assert_eq!("job-info", job.payload);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -148,11 +163,11 @@ async fn reserve_with_timeout_error_case_test() {
 
         match beanstalk_client.reserve_with_timeout(0).await {
             Ok(_) => panic!("It wasn't expected to succeed"),
-            Err(beanstalkclient::BeanstalkError::ReservationTimeout) => {},
-            Err(_) => panic!("It was expected to fail only with a ReservationTimeout")
+            Err(beanstalkclient::BeanstalkError::ReservationTimeout) => {}
+            Err(_) => panic!("It was expected to fail only with a ReservationTimeout"),
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -162,19 +177,25 @@ async fn release_with_config_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
+
         beanstalk_client.put(String::from("message")).await.unwrap();
         let job = beanstalk_client.reserve().await.unwrap();
-        
-        let release_conf = ReleaseCommandConfig { delay: 120, ..ReleaseCommandConfig::default() };
-        let res = beanstalk_client.release_with_config(job.id, release_conf).await.unwrap();
+
+        let release_conf = ReleaseCommandConfig {
+            delay: 120,
+            ..ReleaseCommandConfig::default()
+        };
+        let res = beanstalk_client
+            .release_with_config(job.id, release_conf)
+            .await
+            .unwrap();
 
         assert_eq!("RELEASED\r\n", res);
 
         let job_stats = beanstalk_client.stats_job(job.id).await.unwrap();
         assert_eq!("delayed", job_stats.state);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -184,10 +205,10 @@ async fn release_with_config_failure_case_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
+
         let put_result = beanstalk_client.put(String::from("message")).await.unwrap();
         let job_id = job_id_from_put_result(&put_result);
-        
+
         let release_conf = ReleaseCommandConfig::default();
         match beanstalk_client.release_with_config(job_id, release_conf).await {
             Ok(_) => panic!("release wasn't expected to return an Ok result"),
@@ -200,7 +221,7 @@ async fn release_with_config_failure_case_test() {
             }
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -210,10 +231,10 @@ async fn release_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
+
         beanstalk_client.put(String::from("message")).await.unwrap();
         let job = beanstalk_client.reserve().await.unwrap();
-        
+
         let res = beanstalk_client.release(job.id).await.unwrap();
 
         assert_eq!("RELEASED\r\n", res);
@@ -221,7 +242,7 @@ async fn release_test() {
         let job_stats = beanstalk_client.stats_job(job.id).await.unwrap();
         assert_eq!("ready", job_stats.state);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -231,14 +252,14 @@ async fn delete_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
+
         let put_result = beanstalk_client.put(String::from("a-job")).await.unwrap();
         let job_id = job_id_from_put_result(&put_result);
 
         let delete_result = beanstalk_client.delete(job_id).await.unwrap();
         assert_eq!("DELETED\r\n", delete_result);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -249,8 +270,14 @@ async fn stats_test() {
     let testing_code = async move {
         in_new_testing_tube(&beanstalk_client).await;
 
-        beanstalk_client.put(String::from("first-job")).await.unwrap();
-        beanstalk_client.put(String::from("second-job")).await.unwrap();
+        beanstalk_client
+            .put(String::from("first-job"))
+            .await
+            .unwrap();
+        beanstalk_client
+            .put(String::from("second-job"))
+            .await
+            .unwrap();
         beanstalk_client.reserve().await.unwrap();
 
         let result: Statistics = beanstalk_client.stats().await.unwrap();
@@ -366,7 +393,7 @@ async fn list_tubes_watched_test() {
         let tube_name = in_new_testing_tube(&beanstalk_client).await;
 
         let tube_stats = beanstalk_client.list_tubes_watched().await.unwrap();
-        
+
         assert!(tube_stats.contains(&tube_name));
         assert!(tube_stats.contains(&String::from("default")));
         assert_eq!(2, tube_stats.len());
@@ -383,7 +410,7 @@ async fn list_tube_used_test() {
         let tube_name = in_new_testing_tube(&beanstalk_client).await;
 
         let used_tube = beanstalk_client.list_tube_used().await.unwrap();
-        
+
         assert_eq!(tube_name, used_tube);
     };
 
@@ -396,8 +423,11 @@ async fn bury_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
-        beanstalk_client.put(String::from("job-blah-blah")).await.unwrap();
+
+        beanstalk_client
+            .put(String::from("job-blah-blah"))
+            .await
+            .unwrap();
         let job = beanstalk_client.reserve().await.unwrap();
 
         let bury_result = beanstalk_client.bury(job.id).await.unwrap();
@@ -406,7 +436,7 @@ async fn bury_test() {
         let job_stats = beanstalk_client.stats_job(job.id).await.unwrap();
         assert_eq!("buried", job_stats.state);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -428,7 +458,7 @@ async fn bury_failure_case_test() {
             }
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -438,14 +468,17 @@ async fn touch_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
-        beanstalk_client.put(String::from("job-blah-blah")).await.unwrap();
+
+        beanstalk_client
+            .put(String::from("job-blah-blah"))
+            .await
+            .unwrap();
         let job = beanstalk_client.reserve().await.unwrap();
 
         let bury_result = beanstalk_client.touch(job.id).await.unwrap();
         assert_eq!("TOUCHED\r\n", bury_result);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -467,7 +500,7 @@ async fn touch_failure_case_test() {
             }
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -477,15 +510,18 @@ async fn peek_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
-        let job_result = beanstalk_client.put(String::from("job-data")).await.unwrap();
+
+        let job_result = beanstalk_client
+            .put(String::from("job-data"))
+            .await
+            .unwrap();
         let job_id = job_id_from_put_result(&job_result);
 
         let job = beanstalk_client.peek(job_id).await.unwrap();
         assert_eq!(job_id, job.id);
         assert_eq!("job-data", job.payload);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -495,7 +531,7 @@ async fn peek_failure_case_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
+
         match beanstalk_client.peek(456456456456).await {
             Ok(_) => panic!("peek wasn't expected to return an Ok value"),
             Err(e) => match e {
@@ -507,7 +543,7 @@ async fn peek_failure_case_test() {
             }
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -517,13 +553,16 @@ async fn peek_ready_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
-        beanstalk_client.put(String::from("the-ready-job")).await.unwrap();
+
+        beanstalk_client
+            .put(String::from("the-ready-job"))
+            .await
+            .unwrap();
 
         let job = beanstalk_client.peek_ready().await.unwrap().unwrap();
         assert_eq!("the-ready-job", job.payload);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -533,13 +572,13 @@ async fn peek_ready_not_found_case_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
+
         match beanstalk_client.peek_ready().await.unwrap() {
             Some(_) => panic!("peek_ready was not expected to find any ready job"),
             None => {}
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -549,15 +588,24 @@ async fn peek_delayed_test() {
 
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
-        
-        let config = PutCommandConfig { delay: 600, ..PutCommandConfig::default() };
-        beanstalk_client.put(String::from("a-ready-job")).await.unwrap();
-        beanstalk_client.put_with_config(String::from("a-delayed-job"), config).await.unwrap();
+
+        let config = PutCommandConfig {
+            delay: 600,
+            ..PutCommandConfig::default()
+        };
+        beanstalk_client
+            .put(String::from("a-ready-job"))
+            .await
+            .unwrap();
+        beanstalk_client
+            .put_with_config(String::from("a-delayed-job"), config)
+            .await
+            .unwrap();
 
         let job = beanstalk_client.peek_delayed().await.unwrap().unwrap();
         assert_eq!("a-delayed-job", job.payload);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -568,8 +616,14 @@ async fn peek_buried_test() {
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
 
-        beanstalk_client.put(String::from("a-buried-job")).await.unwrap();
-        beanstalk_client.put(String::from("a-ready-job")).await.unwrap();
+        beanstalk_client
+            .put(String::from("a-buried-job"))
+            .await
+            .unwrap();
+        beanstalk_client
+            .put(String::from("a-ready-job"))
+            .await
+            .unwrap();
 
         let job = beanstalk_client.reserve().await.unwrap();
         beanstalk_client.bury(job.id).await.unwrap();
@@ -577,7 +631,7 @@ async fn peek_buried_test() {
         let job = beanstalk_client.peek_buried().await.unwrap().unwrap();
         assert_eq!("a-buried-job", job.payload);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -589,9 +643,15 @@ async fn kick_job_test() {
         in_new_testing_tube(&beanstalk_client).await;
 
         let delay = 3600;
-        let config = PutCommandConfig { delay, ..PutCommandConfig::default() };
-        let result = beanstalk_client.put_with_config(String::from("job-data"), config).await.unwrap();
-    
+        let config = PutCommandConfig {
+            delay,
+            ..PutCommandConfig::default()
+        };
+        let result = beanstalk_client
+            .put_with_config(String::from("job-data"), config)
+            .await
+            .unwrap();
+
         let job_id = job_id_from_put_result(&result);
         let job_stats = beanstalk_client.stats_job(job_id).await.unwrap();
         assert_eq!("delayed", job_stats.state);
@@ -601,10 +661,9 @@ async fn kick_job_test() {
         let job_stats = beanstalk_client.stats_job(job_id).await.unwrap();
         assert_eq!("ready", job_stats.state);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
-
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn kick_job_not_found_case_test() {
@@ -618,7 +677,7 @@ async fn kick_job_not_found_case_test() {
             Err(_) => {}
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -630,20 +689,26 @@ async fn kick_test() {
         in_new_testing_tube(&beanstalk_client).await;
 
         let delay = 3600;
-        let config = PutCommandConfig { delay, ..PutCommandConfig::default() };
-        let result = beanstalk_client.put_with_config(String::from("job-data"), config).await.unwrap();
-    
+        let config = PutCommandConfig {
+            delay,
+            ..PutCommandConfig::default()
+        };
+        let result = beanstalk_client
+            .put_with_config(String::from("job-data"), config)
+            .await
+            .unwrap();
+
         let job_id = job_id_from_put_result(&result);
         let job_stats = beanstalk_client.stats_job(job_id).await.unwrap();
         assert_eq!("delayed", job_stats.state);
 
         let result = beanstalk_client.kick(3).await.unwrap();
-        
+
         assert_eq!("KICKED 1\r\n", result);
         let job_stats = beanstalk_client.stats_job(job_id).await.unwrap();
         assert_eq!("ready", job_stats.state);
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -654,7 +719,10 @@ async fn pause_tube_test() {
     let testing_code = async {
         let tube_name = in_new_testing_tube(&beanstalk_client).await;
 
-        beanstalk_client.put(String::from("job-data")).await.unwrap();
+        beanstalk_client
+            .put(String::from("job-data"))
+            .await
+            .unwrap();
 
         beanstalk_client.pause_tube(&tube_name, 60).await.unwrap();
 
@@ -664,10 +732,9 @@ async fn pause_tube_test() {
             Err(_) => panic!("It was expected to fail only with a ReservationTimeout")
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
-
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pause_tube_failure_case_test() {
@@ -676,18 +743,24 @@ async fn pause_tube_failure_case_test() {
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
 
-        beanstalk_client.put(String::from("job-data")).await.unwrap();
+        beanstalk_client
+            .put(String::from("job-data"))
+            .await
+            .unwrap();
 
-        match beanstalk_client.pause_tube("name-of-a-not-existing-tube", 5).await {
+        match beanstalk_client
+            .pause_tube("name-of-a-not-existing-tube", 5)
+            .await
+        {
             Ok(_) => panic!("pause_tube was expected to fail because the tube does not exist"),
             Err(beanstalkclient::BeanstalkError::UnexpectedResponse(command, response)) => {
                 assert_eq!("pause-tube", command);
                 assert_eq!("NOT_FOUND\r\n", response);
-            },
-            Err(_) => panic!("It was expected to fail only with a UnexpectedResponse")
+            }
+            Err(_) => panic!("It was expected to fail only with a UnexpectedResponse"),
         }
     };
-    
+
     run_testing_code(beanstalk_channel, testing_code).await;
 }
 
@@ -699,12 +772,11 @@ fn put_command_config_defaults_test() {
     assert_eq!(60, config.time_to_run);
 }
 
-
 // Helper functions ///////////////////////////////////////////////////////////
 
 async fn setup_client() -> (BeanstalkChannel, BeanstalkClient) {
-    let beanstalkd_addr = std::env::var("BEANSTALKD_ADDR").unwrap_or(
-        String::from("localhost:11300"));
+    let beanstalkd_addr =
+        std::env::var("BEANSTALKD_ADDR").unwrap_or(String::from("localhost:11300"));
     let beanstalk_channel = BeanstalkChannel::connect(&beanstalkd_addr).await.unwrap();
 
     let beanstalk_client = beanstalk_channel.create_client();
@@ -714,10 +786,10 @@ async fn setup_client() -> (BeanstalkChannel, BeanstalkClient) {
 
 async fn in_new_testing_tube(beanstalk_client: &BeanstalkClient) -> String {
     let tube_name = random_testing_tube_name();
-    
+
     beanstalk_client.use_tube(&tube_name).await.unwrap();
     beanstalk_client.watch_tube(&tube_name).await.unwrap();
-    
+
     tube_name
 }
 
@@ -725,14 +797,17 @@ fn random_testing_tube_name() -> String {
     format!("test-tube.{}", fastrand::u32(..))
 }
 
-async fn run_testing_code(mut beanstalk: BeanstalkChannel, testing_code: impl core::future::Future<Output = ()>) {
+async fn run_testing_code(
+    mut beanstalk: BeanstalkChannel,
+    testing_code: impl core::future::Future<Output = ()>,
+) {
     tokio::select! {
         _ = beanstalk.run_channel() => assert!(false, "Client should not end before the testing code"),
         _ = testing_code => {},
     };
 }
 
-fn job_id_from_put_result(put_result:  &String) -> JobId {
+fn job_id_from_put_result(put_result: &String) -> JobId {
     let extract_id_regex = Regex::new(r"INSERTED (\d+)\r\n").unwrap();
     let caps = extract_id_regex.captures(put_result).unwrap();
     caps.get(1).unwrap().as_str().parse::<JobId>().unwrap()
