@@ -410,36 +410,20 @@ impl BeanstalkClient {
         }
     }
 
-    /// Reserve a job from the queue. It uses the timeout `RESERVE_DEFAULT_TIMEOUT`!
+    /// Reserve a job from the queue without any timeout.
     pub async fn reserve(&self) -> Result<Job, BeanstalkError> {
-        self.reserve_with_timeout(RESERVE_DEFAULT_TIMEOUT).await
+        let command_name = String::from("reserve");
+        let command = format!("{}\r\n",command_name);
+
+        self.reserve_by_command(command, command_name).await
     }
 
     /// Reserve a job from the queue with the given `timeout`
     pub async fn reserve_with_timeout(&self, timeout: u32) -> Result<Job, BeanstalkError> {
-        let command = format!("reserve-with-timeout {}\r\n", timeout);
-        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("RESERVED".to_string()) }).await?;
-        let mut lines = command_response.trim().split("\r\n");
+        let command_name = String::from("reserve-with-timeout");
+        let command = format!("{} {}\r\n", command_name, timeout);
 
-        let first_line = lines.next()
-            .ok_or(BeanstalkError::UnexpectedResponse("stats-tube".to_string(), "empty response".to_string()))?;
-        let parts: Vec<&str> = first_line.trim().split(" ").collect();
-
-        if parts.len() == 1 && parts[0] == "TIMED_OUT" {
-            return Err(BeanstalkError::ReservationTimeout);
-        }
-
-        if parts.len() != 3 || parts[0] != "RESERVED" {
-            return Err(BeanstalkError::UnexpectedResponse("reserve".to_string(), command_response));
-        }
-
-        let id = parts[1].parse::<JobId>()
-            .map_err(|_| BeanstalkError::UnexpectedResponse("reserve".to_string(), command_response.clone()))?;
-
-        Ok(Job {
-            id,
-            payload: lines.collect::<Vec<&str>>().join("\r\n"),
-        })
+        self.reserve_by_command(command, command_name).await
     }
 
     /// Peek a job by id
@@ -664,5 +648,30 @@ impl BeanstalkClient {
         let stats_yaml = lines.collect::<Vec<&str>>().join("\r\n");
         serde_yaml::from_str(&stats_yaml)
             .map_err(|e| BeanstalkError::UnexpectedResponse("stats-job".to_string(), e.to_string()))
-    } 
+    }
+
+    async fn reserve_by_command(&self, command: String, command_name: String) -> Result<Job, BeanstalkError> {
+        let command_response = self.exchange(ClientMessageBody { command, more_condition: Some("RESERVED".to_string()) }).await?;
+        let mut lines = command_response.trim().split("\r\n");
+
+        let first_line = lines.next()
+            .ok_or(BeanstalkError::UnexpectedResponse(command_name.clone(), "empty response".to_string()))?;
+        let parts: Vec<&str> = first_line.trim().split(" ").collect();
+
+        if parts.len() == 1 && parts[0] == "TIMED_OUT" {
+            return Err(BeanstalkError::ReservationTimeout);
+        }
+
+        if parts.len() != 3 || parts[0] != "RESERVED" {
+            return Err(BeanstalkError::UnexpectedResponse(command_name.clone(), command_response));
+        }
+
+        let id = parts[1].parse::<JobId>()
+            .map_err(|_| BeanstalkError::UnexpectedResponse(command_name.clone(), command_response.clone()))?;
+
+        Ok(Job {
+            id,
+            payload: lines.collect::<Vec<&str>>().join("\r\n"),
+        })
+    }
 }
