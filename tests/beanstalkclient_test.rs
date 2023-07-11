@@ -94,7 +94,7 @@ async fn put_with_config_test() {
         let priority = 50;
         let delay = 3600;
         let time_to_run = 300;
-        let config = PutCommandConfig::new(Some(priority), Some(delay), Some(time_to_run));
+        let config = PutCommandConfig { priority, delay, time_to_run };
         let result = beanstalk_client.put_with_config(String::from("job-web-event"), config).await.unwrap();
     
         let job_id = job_id_from_put_result(&result);
@@ -303,7 +303,7 @@ async fn stats_tube_test() {
 
         let tube_stats = beanstalk_client.stats_tube(&tube_name).await.unwrap();
         assert_eq!(tube_name, tube_stats.name);
-        assert_eq!(1, tube_stats.jobs_urgent);
+        assert_eq!(0, tube_stats.jobs_urgent);
         assert_eq!(1, tube_stats.jobs_ready);
         assert_eq!(0, tube_stats.jobs_reserved);
         assert_eq!(0, tube_stats.jobs_delayed);
@@ -550,7 +550,7 @@ async fn peek_delayed_test() {
     let testing_code = async {
         in_new_testing_tube(&beanstalk_client).await;
         
-        let config = PutCommandConfig::new(None, Some(600), None);
+        let config = PutCommandConfig { delay: 600, ..PutCommandConfig::default() };
         beanstalk_client.put(String::from("a-ready-job")).await.unwrap();
         beanstalk_client.put_with_config(String::from("a-delayed-job"), config).await.unwrap();
 
@@ -589,7 +589,7 @@ async fn kick_job_test() {
         in_new_testing_tube(&beanstalk_client).await;
 
         let delay = 3600;
-        let config = PutCommandConfig::new(None, Some(delay), None);
+        let config = PutCommandConfig { delay, ..PutCommandConfig::default() };
         let result = beanstalk_client.put_with_config(String::from("job-data"), config).await.unwrap();
     
         let job_id = job_id_from_put_result(&result);
@@ -630,7 +630,7 @@ async fn kick_test() {
         in_new_testing_tube(&beanstalk_client).await;
 
         let delay = 3600;
-        let config = PutCommandConfig::new(None, Some(delay), None);
+        let config = PutCommandConfig { delay, ..PutCommandConfig::default() };
         let result = beanstalk_client.put_with_config(String::from("job-data"), config).await.unwrap();
     
         let job_id = job_id_from_put_result(&result);
@@ -693,8 +693,8 @@ async fn pause_tube_failure_case_test() {
 
 #[test]
 fn put_command_config_defaults_test() {
-    let config = PutCommandConfig::new(None, None, None);
-    assert_eq!(0, config.priority);
+    let config = PutCommandConfig::default();
+    assert_eq!(1025, config.priority);
     assert_eq!(0, config.delay);
     assert_eq!(60, config.time_to_run);
 }

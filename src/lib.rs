@@ -13,7 +13,10 @@ use log;
 
 /// Queue size limit for messages to a Beanstalk channel
 const BEANSTALK_MESSAGE_QUEUE_SIZE: usize = 128;
-pub const DEFAULT_PRIORITY: u32 = 0;
+
+// Jobs with priority 0 - 1024 are counted as urgent, 1025 is the highest not urgent priority
+pub const DEFAULT_PRIORITY: u32 = 1025;
+
 pub const PUT_DEFAULT_DELAY: u32 = 0;
 pub const DEFAULT_TIME_TO_RUN: u32 = 60;
 pub const RESERVE_DEFAULT_TIMEOUT: u32 = 60;
@@ -159,13 +162,11 @@ pub struct PutCommandConfig {
     pub time_to_run: u32
 }
 
-impl PutCommandConfig {
-    pub fn new(priority: Option<u32>, delay: Option<u32>, time_to_run: Option<u32>) -> Self {
-        Self {
-            priority: priority.unwrap_or(DEFAULT_PRIORITY),
-            delay: delay.unwrap_or(PUT_DEFAULT_DELAY),
-            time_to_run: time_to_run.unwrap_or(DEFAULT_TIME_TO_RUN)
-        }
+impl Default for PutCommandConfig {
+    fn default() -> Self {
+        Self { priority: DEFAULT_PRIORITY,
+            delay: PUT_DEFAULT_DELAY,
+            time_to_run: DEFAULT_TIME_TO_RUN }
     }
 }
 
@@ -378,7 +379,7 @@ impl BeanstalkClient {
 
     /// Put a job into the queue
     pub async fn put(&self, job: String) -> BeanstalkResult {
-        self.put_with_config(job, PutCommandConfig::new(None, None, None)).await
+        self.put_with_config(job, PutCommandConfig::default()).await
     }
 
     /// Put a job into the queue with a custom configuration
