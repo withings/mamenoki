@@ -187,17 +187,106 @@ impl ReleaseCommandConfig {
 /// beanstalkd statistics
 #[derive(Serialize, Deserialize)]
 pub struct Statistics {
+    #[serde(rename = "current-jobs-urgent")]
+    pub jobs_urgent: u64,
     #[serde(rename = "current-jobs-ready")]
-    pub jobs_ready: usize,
+    pub jobs_ready: u64,
     #[serde(rename = "current-jobs-reserved")]
-    pub jobs_reserved: usize,
+    pub jobs_reserved: u64,
     #[serde(rename = "current-jobs-delayed")]
-    pub jobs_delayed: usize,
+    pub jobs_delayed: u64,
+    #[serde(rename = "current-jobs-buried")]
+    pub jobs_buried: u64,
+    #[serde(rename = "cmd-put")]
+    pub cmd_put: u64,
+    #[serde(rename = "cmd-peek")]
+    pub cmd_peek: u64,
+    #[serde(rename = "cmd-peek-ready")]
+    pub cmd_peek_ready: u64,
+    #[serde(rename = "cmd-peek-delayed")]
+    pub cmd_peek_delayed: u64,
+    #[serde(rename = "cmd-peek-buried")]
+    pub cmd_peek_buried: u64,
+    #[serde(rename = "cmd-reserve")]
+    pub cmd_reserve: u64,
+    #[serde(rename = "cmd-reserve-with-timeout")]
+    pub cmd_reserve_with_timeout: u64,
+    #[serde(rename = "cmd-touch")]
+    pub cmd_touch: u64,
+    #[serde(rename = "cmd-use")]
+    pub cmd_use: u64,
+    #[serde(rename = "cmd-watch")]
+    pub cmd_watch: u64,
+    #[serde(rename = "cmd-ignore")]
+    pub cmd_ignore: u64,
+    #[serde(rename = "cmd-delete")]
+    pub cmd_delete: u64,
+    #[serde(rename = "cmd-release")]
+    pub cmd_release: u64,
+    #[serde(rename = "cmd-bury")]
+    pub cmd_bury: u64,
+    #[serde(rename = "cmd-kick")]
+    pub cmd_kick: u64,
+    #[serde(rename = "cmd-stats")]
+    pub cmd_stats: u64,
+    #[serde(rename = "cmd-stats-job")]
+    pub cmd_stats_job: u64,
+    #[serde(rename = "cmd-stats-tube")]
+    pub cmd_stats_tube: u64,
+    #[serde(rename = "cmd-list-tubes")]
+    pub cmd_list_tubes: u64,
+    #[serde(rename = "cmd-list-tube-used")]
+    pub cmd_list_tube_used: u64,
+    #[serde(rename = "cmd-list-tubes-watched")]
+    pub cmd_list_tubes_watched: u64,
+    #[serde(rename = "cmd-pause-tube")]
+    pub cmd_pause_tube: u64,
+    #[serde(rename = "job-timeouts")]
+    pub job_timeouts: u64,
     #[serde(rename = "total-jobs")]
-    pub total_jobs: usize,
+    pub total_jobs: u64,
+    #[serde(rename = "max-job-size")]
+    pub max_job_size: usize,
+    #[serde(rename = "current-tubes")]
+    pub tubes: usize,
     #[serde(rename = "current-connections")]
-    pub current_connections: usize,
-    pub uptime: u64,
+    pub current_connections: u32,
+    #[serde(rename = "current-producers")]
+    pub producers: u32,
+    #[serde(rename = "current-workers")]
+    pub workers: u32,
+    #[serde(rename = "current-waiting")]
+    pub waiting: u64,
+    #[serde(rename = "total-connections")]
+    pub total_connections: u32,
+    pub pid: u64,
+    pub version: String,
+    #[serde(rename = "rusage-utime")]
+    pub rusage_utime: f64,
+    #[serde(rename = "rusage-stime")]
+    pub rusage_stime: f64,
+    #[serde(rename = "uptime")]
+    pub uptime: u32,
+    #[serde(rename = "binlog-oldest-index")]
+    pub binlog_oldest_index: u32,
+    #[serde(rename = "binlog-current-index")]
+    pub binlog_current_index: u32,
+    #[serde(rename = "binlog-max-size")]
+    pub binlog_max_size: u32,
+    #[serde(rename = "binlog-records-written")]
+    pub binlog_records_written: u64,
+    #[serde(rename = "binlog-records-migrated")]
+    pub binlog_records_migrated: u64,
+    pub id: String,
+    pub hostname: String,
+
+    // These fields can be missing in older versions of beanstalkd
+    #[serde(default)]
+    pub draining: bool,
+    #[serde(default)]
+    pub os: String,
+    #[serde(default)]
+    pub platform: String,
 }
 
 /// job statistics
