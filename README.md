@@ -14,16 +14,16 @@ Build with :
 
 You can run all the tests locally or in a CI environment with:
 
-    $ docker compose -f docker-compose-cicd.yml run all_tests
+    $ docker compose up all_tests --build
 
 You can continuously run all the tests during the development (they will be re-run at every change) with:
 
-    $ docker compose up
+    $ docker compose up dev_test_loop --build
 
 
 ## Usage examples
 
-You can see an usage example of this library in `example/connection_and_request.rs`.
-You can run this code with
-
-    $ docker compose -f docker-compose-cicd.yml run usage_example
+There are some usage examples in the `examples` folder: they all create a connection to beanstalkd and the send different commands to it.
+ * `reader.rs` watches a beanstalk tube, reserves a job and deletes it. You can run it with `docker compose up example_reader`.
+ * `writer.rs` uses a tube and puts a job into it. You can run it with `docker compose up example_reader`.
+ * `stats.rs` requests the global beanstalkd stats and the stats for a tube. You can run it with `docker compose up example_stats`.

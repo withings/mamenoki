@@ -10,10 +10,10 @@ services:
     ports:
       - 11300:11300
 
-  test-loop:
+  all_tests:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     tty: true
     volumes:
       - .:/home/mamenoki
@@ -21,3 +21,85 @@ services:
       - beanstalkd
     environment:
       - BEANSTALKD_ADDR=test-beanstalkd-server:11300
+    command: bash -c "~/.cargo/bin/cargo test"
+
+  dev_test_loop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    volumes:
+      - .:/home/mamenoki
+    depends_on:
+      - beanstalkd
+    environment:
+      - BEANSTALKD_ADDR=test-beanstalkd-server:11300
+    profiles: 
+    - "donotstart"
+
+  example_multiple_requests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    volumes:
+      - .:/home/mamenoki
+    depends_on:
+      - beanstalkd
+    environment:
+      - BEANSTALKD_ADDR=test-beanstalkd-server:11300
+      - RUST_LOG=debug
+    command: bash -c "~/.cargo/bin/cargo run --example multiple_requests"
+    profiles: 
+      - "donotstart"
+
+  example_writer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    volumes:
+      - .:/home/mamenoki
+    depends_on:
+      - beanstalkd
+    environment:
+      - BEANSTALKD_ADDR=test-beanstalkd-server:11300
+      - BEANSTALKD_TUBE=tube_1
+      - RUST_LOG=debug
+    command: bash -c "~/.cargo/bin/cargo run --example writer"
+    profiles: 
+      - "donotstart"
+
+  example_reader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    volumes:
+      - .:/home/mamenoki
+    depends_on:
+      - beanstalkd
+    environment:
+      - BEANSTALKD_ADDR=test-beanstalkd-server:11300
+      - BEANSTALKD_TUBE=tube_1
+      - RUST_LOG=debug
+    command: bash -c "~/.cargo/bin/cargo run --example reader"
+    profiles: 
+      - "donotstart"
+
+  example_stats:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    volumes:
+      - .:/home/mamenoki
+    depends_on:
+      - beanstalkd
+    environment:
+      - BEANSTALKD_ADDR=test-beanstalkd-server:11300
+      - BEANSTALKD_TUBE=a_tube_for_stats
+      - RUST_LOG=debug
+    command: bash -c "~/.cargo/bin/cargo run --example stats"
+    profiles: 
+      - "donotstart"
