@@ -2,7 +2,7 @@
 name = "mamenoki"
 version = "0.1.0"
 edition = "2021"
-license-file = "LICENSE"
+license = "MIT"
 description = "Complete implementation of a Beanstalkd client based on the Tokio runtime"
 homepage = "https://github.com/withings/mamenoki"
 repository = "https://github.com/withings/mamenoki"
