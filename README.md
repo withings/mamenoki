@@ -23,7 +23,7 @@ You can continuously run all the tests during the development (they will be re-r
 
 ## Usage examples
 
-There are some usage examples in the `examples` folder: they all create a connection to beanstalkd and the send different commands to it.
- * `reader.rs` watches a beanstalk tube, reserves a job and deletes it. You can run it with `docker compose up example_reader`.
- * `writer.rs` uses a tube and puts a job into it. You can run it with `docker compose up example_reader`.
- * `stats.rs` requests the global beanstalkd stats and the stats for a tube. You can run it with `docker compose up example_stats`.
+There are some usage examples in the [examples](examples) folder: they all create a connection to beanstalkd and the send different commands to it.
+ * [reader.rs](examples/reader.rs) watches a beanstalk tube, reserves a job and deletes it. You can run it with `docker compose up example_reader`.
+ * [writer.rs](examples/writer.rs) uses a tube and puts a job into it. You can run it with `docker compose up example_reader`.
+ * [stats.rs](examples/stats.rs) requests the global beanstalkd stats and the stats for a tube. You can run it with `docker compose up example_stats`.
