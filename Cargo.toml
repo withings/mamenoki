@@ -2,8 +2,12 @@
 name = "mamenoki"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license-file = "LICENSE"
+description = "Complete implementation of a Beanstalkd client based on the Tokio runtime"
+homepage = "https://github.com/withings/mamenoki"
+repository = "https://github.com/withings/mamenoki"
+readme = "README.md"
+keywords = ["client", "beanstalkd", "tokio", "asynchronous"]
 
 [dependencies]
 serde = { version = ">= 1.0.158", features = ["derive", "rc"] }

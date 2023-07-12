@@ -1,6 +1,6 @@
 # Welcome to Mamenoki!
 
-This is a Rust implementation of a Beanstalkd client based on the tokio runtime.
+This is a Rust complete implementation of a Beanstalkd client based on the tokio runtime.
 
 ## Building and running
 
