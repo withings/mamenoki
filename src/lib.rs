@@ -113,6 +113,14 @@ impl BeanstalkChannel {
                 continue;
             }
 
+            if response.is_empty() {
+                message
+                    .return_tx
+                    .send(Err(BeanstalkError::CommunicationError("empty response from beanstalkd".into())))
+                    .ok();
+                continue;
+            }
+
             /* Figure out if we need to read more: the task is expecting a prefix AND that's what we get */
             let mut response_parts = response.trim().split(" ");
             let expect_more_content = message
